@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { collection, query, where, onSnapshot, orderBy, getDocs, limit } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, getDocs, limit, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { Play, SkipBack, SkipForward, Volume2, VolumeX, List, Tv, X, Radio, ChevronRight, Share2 } from "lucide-react";
+import { Play, SkipBack, SkipForward, Volume2, VolumeX, List, Tv, X, Radio, ChevronRight, Share2, Disc, Edit2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 declare global {
@@ -33,8 +33,15 @@ export default function Player() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [playCount, setPlayCount] = useState(0);
   const [channelName, setChannelName] = useState("Loading...");
+  const [channelId, setChannelId] = useState("");
   const [loopPlaylist, setLoopPlaylist] = useState(false);
   
+  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+
   const ytPlayerRef = useRef<any>(null);
   const fbPlayerRef = useRef<any>(null);
   const fbIntervalRef = useRef<any>(null);
@@ -47,6 +54,7 @@ export default function Player() {
     const unsubChannel = onSnapshot(channelsQuery, (snapshot) => {
       if (!snapshot.empty) {
         const channelDoc = snapshot.docs[0];
+        setChannelId(channelDoc.id);
         setChannelName(channelDoc.data().name);
         setLoopPlaylist(channelDoc.data().loopPlaylist || false);
 
@@ -124,6 +132,32 @@ export default function Player() {
   };
   
   const handlePrev = () => setCurrentIndex((p) => (p - 1 + videos.length) % videos.length);
+
+  const toggleGlobalLoop = async () => {
+    if (!channelId) return;
+    await updateDoc(doc(db, "channels", channelId), {
+      loopPlaylist: !loopPlaylist
+    });
+  };
+
+  const toggleSingleLoop = async (v: Video) => {
+    if (!channelId) return;
+    await updateDoc(doc(db, "channels", channelId, "videos", v.id), {
+      loopVideo: !v.loopVideo
+    });
+  };
+
+  const handleUpdateTimes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!channelId || !editingVideo) return;
+    await updateDoc(doc(db, "channels", channelId, "videos", editingVideo.id), {
+      title: editTitle,
+      startTime: Number(editStartTime) || 0,
+      endTime: Number(editEndTime) || 0,
+      updatedAt: serverTimestamp()
+    });
+    setEditingVideo(null);
+  };
 
   const currentVideo = videos[currentIndex];
 
@@ -226,32 +260,38 @@ export default function Player() {
 
       {/* Control Sidebar (Permanent, 480px Wide, 1300px High) */}
       <div className="w-[480px] h-[1300px] bg-zinc-950 border-l border-white/5 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
-        <div className="p-8 border-b border-white/5 bg-zinc-900/50">
+        <div className="p-8 border-b border-white/5 bg-zinc-900/50 flex items-center justify-between">
           <div className="space-y-1">
             <h3 className="text-xs font-black italic uppercase tracking-[0.3em] text-zinc-500">Live Feed</h3>
             <h4 className="text-xl font-black uppercase italic tracking-tighter">Sequence Menu</h4>
           </div>
+          <button 
+            onClick={toggleGlobalLoop}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${loopPlaylist ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-white/5 text-zinc-500'}`}
+          >
+            <Disc className={`w-3.5 h-3.5 ${loopPlaylist && 'animate-spin'}`} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Loop</span>
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-black/20">
           {videos.map((v, i) => (
-            <motion.button
+            <motion.div
               key={v.id}
-              onClick={() => setCurrentIndex(i)}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className={`group w-full p-4 flex gap-5 text-left transition-all rounded-3xl border ${
-                i === currentIndex 
-                ? 'bg-red-600/10 border-red-500/20 shadow-2xl' 
-                : 'bg-black/40 border-white/5 hover:border-white/10'
+              whileHover={{ scale: 1.01 }}
+              className={`group w-full p-4 flex gap-5 text-left transition-all rounded-3xl border border-white/5 ${
+                i === currentIndex ? 'bg-red-600/10 border-red-500/20 shadow-2xl' : 'bg-black/40'
               }`}
             >
-              <div className="w-24 aspect-video bg-zinc-900 rounded-[15px] shrink-0 flex items-center justify-center overflow-hidden relative border border-white/5">
+              <div 
+                className="w-24 aspect-video bg-zinc-900 rounded-[15px] shrink-0 flex items-center justify-center overflow-hidden relative cursor-pointer"
+                onClick={() => setCurrentIndex(i)}
+              >
                 {v.type === 'yt' ? (
                   <img 
                     src={`https://img.youtube.com/vi/${v.val}/mqdefault.jpg`} 
                     alt="thumb" 
-                    className={`w-full h-full object-cover transition-all duration-700 ${i === currentIndex ? 'scale-110 opacity-100' : 'opacity-40 grayscale group-hover:grayscale-0 group-hover:opacity-60'}`}
+                    className={`w-full h-full object-cover transition-all duration-700 ${i === currentIndex ? 'scale-110 opacity-100' : 'opacity-40 grayscale hover:opacity-100 hover:grayscale-0'}`}
                     referrerPolicy="no-referrer"
                   />
                 ) : (
@@ -263,18 +303,43 @@ export default function Player() {
                   </div>
                 )}
               </div>
-              <div className="flex-1 min-w-0 py-1 flex flex-col justify-center">
-                <h4 className={`font-black uppercase tracking-tight leading-tight line-clamp-2 text-xs ${i === currentIndex ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
-                  {v.title}
-                </h4>
-                <div className="flex items-center justify-between mt-2">
-                   <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">
-                     {v.type === 'yt' ? 'M-YOUTUBE' : 'M-FACEBOOK'}
-                   </span>
-                   {i === currentIndex && <ChevronRight className="w-4 h-4 text-red-600" />}
+              <div className="flex-1 min-w-0 py-1 flex flex-col">
+                <div 
+                  className="flex-1 cursor-pointer"
+                  onClick={() => setCurrentIndex(i)}
+                >
+                  <h4 className={`font-black uppercase tracking-tight leading-tight line-clamp-1 text-xs mb-1 ${i === currentIndex ? 'text-white' : 'text-zinc-500'}`}>
+                    {v.title}
+                  </h4>
+                  <div className="flex items-center gap-2 mb-2">
+                    {v.loopVideo && <span className="text-[8px] bg-orange-500 text-black px-1.5 py-0.5 rounded font-black uppercase">L-ON</span>}
+                    {(v.startTime || v.endTime) && <span className="text-[8px] bg-red-600/20 text-red-500 px-1.5 py-0.5 rounded font-black uppercase">{v.startTime || 0}s-{(v.endTime || 'END')}</span>}
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => {
+                       setEditingVideo(v);
+                       setEditTitle(v.title);
+                       setEditUrl(v.url);
+                       setEditStartTime(v.startTime?.toString() || "0");
+                       setEditEndTime(v.endTime?.toString() || "0");
+                    }}
+                    className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-600 hover:text-white transition-all"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button 
+                    onClick={() => toggleSingleLoop(v)}
+                    className={`p-1.5 rounded-lg transition-all ${v.loopVideo ? 'text-orange-500 bg-orange-500/10' : 'text-zinc-600 hover:text-zinc-400'}`}
+                  >
+                    <Disc className={`w-3.5 h-3.5 ${v.loopVideo && 'animate-spin'}`} />
+                  </button>
+                   {i === currentIndex && <ChevronRight className="w-4 h-4 text-red-600 ml-auto" />}
                 </div>
               </div>
-            </motion.button>
+            </motion.div>
           ))}
         </div>
 
@@ -310,6 +375,92 @@ export default function Player() {
            </div>
         </div>
       </div>
+      {editingVideo && (
+        <PlayerModal 
+          video={editingVideo}
+          editTitle={editTitle}
+          setEditTitle={setEditTitle}
+          editStartTime={editStartTime}
+          setEditStartTime={setEditStartTime}
+          editEndTime={editEndTime}
+          setEditEndTime={setEditEndTime}
+          onDiscard={() => setEditingVideo(null)}
+          onCommit={handleUpdateTimes}
+        />
+      )}
     </div>
   );
+}
+
+// Sub-component or inline modal for Player Edit
+function PlayerModal({ video, onDiscard, onCommit, editTitle, setEditTitle, editStartTime, setEditStartTime, editEndTime, setEditEndTime }: any) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-3xl shrink-0">
+      <motion.div 
+        initial={{ scale: 0.9, y: 20, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        className="bg-zinc-900 border border-white/5 p-10 rounded-[32px] max-w-xl w-full shadow-2xl overflow-hidden"
+      >
+        <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8 tracking-tight">Broadcast Timing</h2>
+        <form onSubmit={onCommit} className="space-y-8">
+          <div className="space-y-6">
+            <div>
+              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Content Label</label>
+              <input
+                type="text"
+                required
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800 shadow-inner"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Start At (s)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editStartTime}
+                  onChange={(e) => setEditStartTime(e.target.value)}
+                  className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">End At (s)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editEndTime}
+                  onChange={(e) => setEditEndTime(e.target.value)}
+                  className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
+                  placeholder="0 for full"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-4 pt-4">
+            <button 
+              type="button"
+              onClick={onDiscard}
+              className="flex-1 px-6 py-5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl font-black uppercase text-xs tracking-widest transition-all"
+            >
+              Discard
+            </button>
+            <button 
+              type="submit"
+              className="flex-1 px-6 py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-red-600/20"
+            >
+              Commit
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+export function PlayerContainer() {
+  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  // ... this needs more cleanup, but basic logic is moved
 }

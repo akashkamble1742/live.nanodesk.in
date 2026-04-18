@@ -80,12 +80,14 @@ export default function AdminDashboard() {
           </h1>
         </div>
         
-        <button
-          onClick={() => setIsAdding(true)}
-          className="flex items-center gap-3 bg-white text-black font-black py-4 px-8 rounded-2xl transition-all shadow-2xl hover:scale-105 active:scale-95 group"
-        >
-          <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" /> Create New Feed
-        </button>
+        {appUser?.role === 'admin' && (
+          <button
+            onClick={() => setIsAdding(true)}
+            className="flex items-center gap-3 bg-white text-black font-black py-4 px-8 rounded-2xl transition-all shadow-2xl hover:scale-105 active:scale-95 group"
+          >
+            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" /> Create New Feed
+          </button>
+        )}
       </div>
 
       <AnimatePresence>
@@ -181,32 +183,36 @@ export default function AdminDashboard() {
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> Public Link
                 </Link>
-                <button 
-                  onClick={(e) => handleDeleteChannel(channel.id, e)}
-                  className="p-2 text-zinc-700 hover:text-red-600 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {appUser?.role === 'admin' && (
+                  <button 
+                    onClick={(e) => handleDeleteChannel(channel.id, e)}
+                    className="p-2 text-zinc-700 hover:text-red-600 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
         ))}
         
-        <button
-          onClick={() => setIsAdding(true)}
-          className="group relative h-full min-h-[400px] border-2 border-dashed border-white/5 rounded-[32px] p-8 flex flex-col items-center justify-center gap-6 hover:border-red-600/40 hover:bg-red-600/5 transition-all duration-500"
-        >
-          <div className="relative">
-            <div className="absolute inset-0 bg-zinc-800 blur-2xl group-hover:bg-red-600/20 transition-all" />
-            <div className="relative w-20 h-20 bg-zinc-900 border border-white/5 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:bg-red-600 transition-all">
-              <Plus className="w-8 h-8 text-zinc-700 group-hover:text-white transition-colors" />
+        {appUser?.role === 'admin' && (
+          <button
+            onClick={() => setIsAdding(true)}
+            className="group relative h-full min-h-[400px] border-2 border-dashed border-white/5 rounded-[32px] p-8 flex flex-col items-center justify-center gap-6 hover:border-red-600/40 hover:bg-red-600/5 transition-all duration-500"
+          >
+            <div className="relative">
+              <div className="absolute inset-0 bg-zinc-800 blur-2xl group-hover:bg-red-600/20 transition-all" />
+              <div className="relative w-20 h-20 bg-zinc-900 border border-white/5 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:bg-red-600 transition-all">
+                <Plus className="w-8 h-8 text-zinc-700 group-hover:text-white transition-colors" />
+              </div>
             </div>
-          </div>
-          <div className="text-center space-y-1">
-            <span className="block font-black uppercase italic tracking-tighter text-xl text-zinc-500 group-hover:text-white transition-colors">Add Station</span>
-            <span className="text-[10px] text-zinc-700 font-bold uppercase tracking-widest">New broadcast stream</span>
-          </div>
-        </button>
+            <div className="text-center space-y-1">
+              <span className="block font-black uppercase italic tracking-tighter text-xl text-zinc-500 group-hover:text-white transition-colors">Add Station</span>
+              <span className="text-[10px] text-zinc-700 font-bold uppercase tracking-widest">New broadcast stream</span>
+            </div>
+          </button>
+        )}
       </div>
     </div>
   );
