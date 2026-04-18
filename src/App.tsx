@@ -15,7 +15,9 @@ import Navbar from "./components/Navbar";
 function AppContent() {
   const { appUser, loading } = useAuth();
   const location = useLocation();
-  const isPlayerPage = location.pathname.startsWith('/play/');
+  
+  // Explicit check to hide Navbar on the broadcast page
+  const isPlayerPage = location.pathname.includes('/play/');
 
   if (loading) {
     return (
@@ -26,7 +28,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white font-sans selection:bg-red-500/30 font-sans">
+    <div className={`min-h-screen bg-zinc-950 text-white font-sans selection:bg-red-500/30 ${isPlayerPage ? 'overflow-hidden' : ''}`}>
       {!isPlayerPage && <Navbar />}
       <main>
         <Routes>

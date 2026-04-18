@@ -133,19 +133,12 @@ export default function Player() {
 
   if (videos.length === 0) {
     return (
-      <div className="h-screen bg-black flex flex-col items-center justify-center space-y-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(220,38,38,0.1),transparent)] flex items-center justify-center">
-            <motion.div 
-               animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
-               transition={{ duration: 4, repeat: Infinity }}
-               className="w-[500px] h-[500px] bg-red-600 rounded-full blur-[100px]"
-            />
-        </div>
+      <div className="h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden">
         <div className="relative flex flex-col items-center gap-6">
            <Tv className="w-20 h-20 text-zinc-900 animate-pulse" />
-           <div className="text-center space-y-2">
-             <h2 className="text-2xl font-black italic uppercase tracking-tighter text-zinc-500">{channelName}</h2>
-             <p className="text-zinc-700 text-xs font-black uppercase tracking-[0.3em] italic">Transmitting silence...</p>
+           <div className="text-center">
+             <h2 className="text-xl font-black italic uppercase tracking-tighter text-zinc-800">{channelName}</h2>
+             <p className="text-zinc-900 text-[10px] font-black uppercase tracking-[0.3em] mt-2">No Feed Detected</p>
            </div>
         </div>
       </div>
@@ -154,11 +147,12 @@ export default function Player() {
 
   return (
     <div className="h-screen bg-black overflow-hidden flex flex-col lg:flex-row font-sans text-white">
-      {/* Main Broadcast Center - Area: 1920x1080 if window is 2400x1080 */}
+      {/* 
+        CLEAN BROADCAST AREA (0px to 1920px when window is 2400x1080)
+        All HUD and branding overlays removed as per user request for clean capture.
+      */}
       <div 
         className="flex-1 h-full relative bg-black flex items-center justify-center group"
-        onMouseEnter={() => setIsHovering(true)}
-        onMouseLeave={() => setIsHovering(false)}
       >
         {currentVideo?.type === 'yt' ? (
           <div id="yt-player-target" className="absolute inset-0 w-full h-full" />
@@ -176,51 +170,21 @@ export default function Player() {
           </div>
         )}
 
-        {/* Dynamic Interface Elements */}
-        {(!sidebarOpen || isHovering) && (
+        {/* Sidebar reveal (invisible on capture if limited to 1920px) */}
+        {!sidebarOpen && (
            <motion.div 
              initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             className="absolute top-10 right-10 z-40 flex items-center gap-4"
+             whileHover={{ opacity: 1 }}
+             className="absolute top-10 right-10 z-40"
            >
              <button 
                 onClick={() => setSidebarOpen(true)}
-                className="p-5 bg-black/40 hover:bg-red-600 rounded-[20px] transition-all border border-white/10 backdrop-blur-xl group shadow-2xl"
-                title="Open Dashboard"
+                className="p-5 bg-white text-black hover:scale-110 rounded-[20px] transition-all shadow-2xl"
              >
-               <List className="w-6 h-6 group-hover:scale-110 transition-transform" />
+               <List className="w-6 h-6" />
              </button>
            </motion.div>
         )}
-
-        {/* Global Branding Overlay */}
-        <div className="absolute top-10 left-10 z-40 pointer-events-none flex items-center gap-3 bg-black/40 px-6 py-3 rounded-full border border-white/5 backdrop-blur-md">
-           <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,1)]" />
-           <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50">StreamLink <span className="text-red-600">Pro</span></span>
-        </div>
-
-        {/* Immersive HUD Overlay */}
-        <div className="absolute inset-x-0 bottom-0 p-12 lg:p-16 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none transition-opacity duration-700">
-           <AnimatePresence mode="wait">
-             <motion.div 
-               key={currentVideo?.id}
-               initial={{ opacity: 0, y: 30 }}
-               animate={{ opacity: 1, y: 0 }}
-               exit={{ opacity: 0, scale: 0.95 }}
-               className="max-w-4xl"
-             >
-               <div className="flex items-center gap-4 mb-6">
-                 <span className="bg-red-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-red-600/40">Transmission Live</span>
-                 <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                    <Radio className="w-3 h-3 animate-pulse" /> Channel: {channelName}
-                 </div>
-               </div>
-               <h2 className="text-5xl lg:text-8xl font-black italic uppercase tracking-tighter leading-none mb-4 tracking-tighter drop-shadow-[0_10px_20px_rgba(0,0,0,1)]">
-                 {currentVideo?.title}
-               </h2>
-             </motion.div>
-           </AnimatePresence>
-        </div>
       </div>
 
       {/* Control Sidebar */}
