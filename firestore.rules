@@ -35,7 +35,7 @@ service cloud.firestore {
     function isValidVideo(data) {
       return data.title is string && data.title.size() > 0 && data.title.size() <= 200
           && data.url is string && data.url.size() > 0 && data.url.size() <= 1000
-          && data.type in ['yt', 'fb']
+          && data.type in ['yt', 'fb', 'x', 'generic']
           && data.val is string && data.val.size() > 0 && data.val.size() <= 200
           && data.order is number
           && data.active is bool
@@ -55,12 +55,12 @@ service cloud.firestore {
     // 1. CHANNELS
     match /channels/{channelId} {
       allow read: if true; // Publicly viewable if you know the ID
-      allow create: if isEmailVerified() && isAdmin() && isValidChannel(incoming()) && isValidId(channelId);
+      allow create: if isEmailVerified() && isValidChannel(incoming()) && isValidId(channelId);
       allow update: if isEmailVerified() && (
-        (isAdmin() && existing().ownerId == request.auth.uid && isValidChannel(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'slug']))
+        ((existing().ownerId == request.auth.uid || isAdmin()) && isValidChannel(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'slug', 'loopPlaylist', 'syncTrigger']))
         || isSuperAdmin()
       );
-      allow delete: if isEmailVerified() && (isAdmin() && existing().ownerId == request.auth.uid || isSuperAdmin());
+      allow delete: if isEmailVerified() && (existing().ownerId == request.auth.uid || isAdmin() || isSuperAdmin());
 
       // 2. VIDEOS (Subcollection)
       match /videos/{videoId} {

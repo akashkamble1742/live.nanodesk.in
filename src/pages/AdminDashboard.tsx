@@ -24,20 +24,19 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!user) return;
 
-    const q = appUser?.role === 'admin' 
-      ? query(collection(db, "channels")) // Admins see everything
-      : query(collection(db, "channels"), where("ownerId", "==", user.uid));
+    // ALL users can see ALL channels
+    const q = query(collection(db, "channels"));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setChannels(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Channel)));
     });
 
     return unsubscribe;
-  }, [user, appUser]);
+  }, [user]);
 
   const handleCreateChannel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newChannelName || !user) return;
+    if (!newChannelName || !user || appUser?.role !== 'admin') return;
 
     const slug = newChannelName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     

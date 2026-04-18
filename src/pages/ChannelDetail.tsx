@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { Plus, Trash2, ArrowLeft, Youtube, Facebook, Save, Play, GripVertical, Power, ExternalLink, Radio, Disc, Edit2 } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Youtube, Facebook, Save, Play, GripVertical, Power, ExternalLink, Radio, Disc, Edit2, RefreshCw } from "lucide-react";
 import { motion, Reorder, AnimatePresence } from "motion/react";
 
 interface Video {
@@ -80,7 +80,7 @@ export default function ChannelDetail() {
     e.preventDefault();
     if (!channelId || !newVideoUrl) return;
 
-    let type: 'yt' | 'fb' = 'yt';
+    let type: 'yt' | 'fb' | 'x' | 'generic' = 'yt';
     let val = '';
 
     if (newVideoUrl.includes('youtu')) {
@@ -91,13 +91,17 @@ export default function ChannelDetail() {
     } else if (newVideoUrl.includes('facebook')) {
       type = 'fb';
       val = newVideoUrl;
+    } else if (newVideoUrl.includes('twitter.com') || newVideoUrl.includes('x.com')) {
+      type = 'x';
+      val = newVideoUrl;
     } else {
-      return alert("Only YouTube and Facebook links supported");
+      type = 'generic';
+      val = newVideoUrl;
     }
 
     try {
       await addDoc(collection(db, "channels", channelId, "videos"), {
-        title: newVideoTitle || (type === 'yt' ? "YouTube Video" : "Facebook Video"),
+        title: newVideoTitle || (type === 'yt' ? "YouTube Video" : type === 'fb' ? "Facebook Video" : type === 'x' ? "X/Twitter Video" : "External Video"),
         url: newVideoUrl,
         type,
         val,
@@ -121,40 +125,59 @@ export default function ChannelDetail() {
 
   const handleFetchDuration = (url: string, isEdit = false) => {
     const id = ytId(url);
-    if (!id) return;
-    
-    setIsFetching(true);
-    let fetcher = document.getElementById('temp-duration-fetcher');
-    if (!fetcher) {
-      fetcher = document.createElement('div');
-      fetcher.id = 'temp-duration-fetcher';
-      fetcher.style.display = 'none';
-      document.body.appendChild(fetcher);
-    }
-
-    new window.YT.Player('temp-duration-fetcher', {
-      height: '0',
-      width: '0',
-      videoId: id,
-      events: {
-        onReady: (event: any) => {
-          const duration = Math.floor(event.target.getDuration());
-          if (isEdit) {
-            setEditEndTime(fromSeconds(duration));
-          } else {
-            setTotalDuration(duration);
-            setNewEndTime(fromSeconds(duration));
-          }
-          setIsFetching(false);
-          event.target.destroy();
-        },
-        onError: () => setIsFetching(false)
+    if (id) {
+      setIsFetching(true);
+      let fetcher = document.getElementById('temp-duration-fetcher');
+      if (!fetcher) {
+        fetcher = document.createElement('div');
+        fetcher.id = 'temp-duration-fetcher';
+        fetcher.style.display = 'none';
+        document.body.appendChild(fetcher);
       }
-    });
+
+      new window.YT.Player('temp-duration-fetcher', {
+        height: '0',
+        width: '0',
+        videoId: id,
+        events: {
+          onReady: (event: any) => {
+            const duration = Math.floor(event.target.getDuration());
+            if (isEdit) {
+              setEditEndTime(fromSeconds(duration));
+            } else {
+              setTotalDuration(duration);
+              setNewEndTime(fromSeconds(duration));
+            }
+            setIsFetching(true);
+            setTimeout(() => {
+              setIsFetching(false);
+              event.target.destroy();
+            }, 100);
+          },
+          onError: () => setIsFetching(false)
+        }
+      });
+    } else if (url.match(/\.(mp4|webm|ogg|mov)$|^https?:\/\/.*(video|stream).*/i)) {
+      // Generic video duration fetch
+      setIsFetching(true);
+      const v = document.createElement('video');
+      v.src = url;
+      v.onloadedmetadata = () => {
+        const duration = Math.floor(v.duration);
+        if (isEdit) {
+          setEditEndTime(fromSeconds(duration));
+        } else {
+          setTotalDuration(duration);
+          setNewEndTime(fromSeconds(duration));
+        }
+        setIsFetching(false);
+      };
+      v.onerror = () => setIsFetching(false);
+    }
   };
 
   useEffect(() => {
-    if (newVideoUrl.includes('youtu')) {
+    if (newVideoUrl) {
       handleFetchDuration(newVideoUrl, false);
     }
   }, [newVideoUrl]);
@@ -163,7 +186,7 @@ export default function ChannelDetail() {
     e.preventDefault();
     if (!channelId || !editingVideo || !editUrl) return;
 
-    let type: 'yt' | 'fb' = 'yt';
+    let type: 'yt' | 'fb' | 'x' | 'generic' = 'yt';
     let val = '';
 
     if (editUrl.includes('youtu')) {
@@ -174,8 +197,12 @@ export default function ChannelDetail() {
     } else if (editUrl.includes('facebook')) {
       type = 'fb';
       val = editUrl;
+    } else if (editUrl.includes('twitter.com') || editUrl.includes('x.com')) {
+      type = 'x';
+      val = editUrl;
     } else {
-      return alert("Only YouTube and Facebook links supported");
+      type = 'generic';
+      val = editUrl;
     }
 
     try {
@@ -208,6 +235,26 @@ export default function ChannelDetail() {
       loopPlaylist: !channel.loopPlaylist
     });
     setChannel({ ...channel, loopPlaylist: !channel.loopPlaylist });
+  };
+
+  const handleRestartPlaylist = async () => {
+    if (!channelId) return;
+    await updateDoc(doc(db, "channels", channelId), {
+      syncTrigger: {
+        type: 'RESTART_PLAYLIST',
+        timestamp: serverTimestamp()
+      }
+    });
+  };
+
+  const handleRestartVideo = async () => {
+    if (!channelId) return;
+    await updateDoc(doc(db, "channels", channelId), {
+      syncTrigger: {
+        type: 'RESTART_VIDEO',
+        timestamp: serverTimestamp()
+      }
+    });
   };
 
   const toggleActive = async (v: Video) => {
@@ -387,6 +434,26 @@ export default function ChannelDetail() {
                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${channel.loopPlaylist ? 'right-1' : 'left-1'}`} />
                     </div>
                  </button>
+
+                 <div className="grid grid-cols-2 gap-4">
+                   <button 
+                     onClick={handleRestartPlaylist}
+                     className="flex flex-col items-center justify-center gap-2 p-6 bg-white/[0.03] border border-white/5 rounded-[24px] hover:bg-white/[0.06] transition-all group text-center"
+                     title="Restart from first video"
+                   >
+                     <RefreshCw className="w-5 h-5 text-zinc-500 group-hover:text-white transition-colors" />
+                     <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 group-hover:text-white leading-tight">Restart List</span>
+                   </button>
+                   <button 
+                     onClick={handleRestartVideo}
+                     className="flex flex-col items-center justify-center gap-2 p-6 bg-white/[0.03] border border-white/5 rounded-[24px] hover:bg-white/[0.06] transition-all group text-center"
+                     title="Restart current playing source"
+                   >
+                     <Play className="w-5 h-5 text-zinc-500 group-hover:text-red-500 transition-colors" />
+                     <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 group-hover:text-white leading-tight">Restart Source</span>
+                   </button>
+                 </div>
+
                  <Link 
                    to={`/play/${channel.slug}`}
                    target="_blank"

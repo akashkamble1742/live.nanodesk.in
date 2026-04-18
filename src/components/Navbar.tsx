@@ -34,7 +34,7 @@ export default function Navbar() {
             {user ? (
               <>
                 <div className="hidden md:flex items-center gap-6 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
-                  <Link to="/admin" className="hover:text-red-500 transition-colors py-1">Channels</Link>
+                  <Link to="/admin" className="hover:text-red-500 transition-colors py-1">Stations</Link>
                   {appUser?.role === 'admin' && (
                     <Link to="/admin/users" className="hover:text-red-500 transition-colors flex items-center gap-2 py-1">
                       <Settings className="w-3.5 h-3.5" /> Access Control
@@ -44,9 +44,9 @@ export default function Navbar() {
                 
                 <div className="flex items-center gap-3 pl-6 border-l border-white/5">
                   <div className="flex flex-col items-end hidden sm:flex">
-                    <span className="text-sm font-bold tracking-tight">{user.displayName || "Admin"}</span>
+                    <span className="text-sm font-bold tracking-tight">{user.displayName || (appUser?.role === 'admin' ? "Super Admin" : "User")}</span>
                     <div className="flex items-center gap-1.5">
-                       <Disc className="w-3 h-3 text-red-500 animate-pulse" />
+                       <Disc className={`w-3 h-3 ${appUser?.role === 'admin' ? 'text-red-500 animate-pulse' : 'text-blue-500'}`} />
                        <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">{appUser?.role || 'user'}</span>
                     </div>
                   </div>

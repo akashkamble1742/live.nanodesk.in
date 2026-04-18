@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 import { collection, query, where, onSnapshot, orderBy, getDocs, limit, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { Play, SkipBack, SkipForward, Volume2, VolumeX, List, Tv, X, Radio, ChevronRight, Share2, Disc, Edit2, RefreshCw } from "lucide-react";
@@ -42,6 +43,7 @@ const fromSeconds = (seconds: number) => {
 
 export default function Player() {
   const { channelSlug } = useParams();
+  const { appUser } = useAuth();
   const [videos, setVideos] = useState<Video[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [playCount, setPlayCount] = useState(0);
@@ -111,9 +113,30 @@ export default function Player() {
     const unsubChannel = onSnapshot(channelsQuery, (snapshot) => {
       if (!snapshot.empty) {
         const channelDoc = snapshot.docs[0];
+        const data = channelDoc.data();
         setChannelId(channelDoc.id);
-        setChannelName(channelDoc.data().name);
-        setLoopPlaylist(channelDoc.data().loopPlaylist || false);
+        setChannelName(data.name);
+        setLoopPlaylist(data.loopPlaylist || false);
+
+        // Remote Sync Command Listener
+        if (data.syncTrigger) {
+          const { type, timestamp } = data.syncTrigger;
+          const triggerTime = timestamp?.toMillis() || 0;
+          
+          // Only process if it's a NEW trigger (not from a previous session)
+          const lastTriggerTime = parseInt(localStorage.getItem(`lastSync_${channelDoc.id}`) || "0");
+          
+          if (triggerTime > lastTriggerTime) {
+            localStorage.setItem(`lastSync_${channelDoc.id}`, triggerTime.toString());
+            
+            if (type === 'RESTART_PLAYLIST') {
+              setCurrentIndex(0);
+              setPlayCount(c => c + 1);
+            } else if (type === 'RESTART_VIDEO') {
+              setPlayCount(c => c + 1);
+            }
+          }
+        }
       }
     });
 
@@ -239,7 +262,7 @@ export default function Player() {
     e.preventDefault();
     if (!channelId || !editingVideo) return;
 
-    let type: 'yt' | 'fb' = 'yt';
+    let type: 'yt' | 'fb' | 'x' | 'generic' = 'yt';
     let val = '';
 
     if (editUrl.includes('youtu')) {
@@ -249,6 +272,12 @@ export default function Player() {
       val = id;
     } else if (editUrl.includes('facebook')) {
       type = 'fb';
+      val = editUrl;
+    } else if (editUrl.includes('twitter.com') || editUrl.includes('x.com')) {
+      type = 'x';
+      val = editUrl;
+    } else {
+      type = 'generic';
       val = editUrl;
     }
 
@@ -372,8 +401,8 @@ export default function Player() {
       <div className="w-[1920px] h-[1080px] relative bg-black shrink-0">
         {currentVideo?.type === 'yt' ? (
           <div id="yt-player-target" className="w-full h-full" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
+        ) : currentVideo?.type === 'fb' ? (
+          <div className="w-full h-full flex items-center justify-center" key={`${currentVideo.id}-${playCount}`}>
             <div 
               className="fb-video" 
               data-href={currentVideo?.val} 
@@ -382,6 +411,37 @@ export default function Player() {
               data-width="1920"
               data-show-captions="false"
               style={{ width: '1920px', height: '1080px' }}
+            />
+          </div>
+        ) : currentVideo?.type === 'x' ? (
+          <div className="w-full h-full bg-black flex items-center justify-center" key={`${currentVideo.id}-${playCount}`}>
+            <iframe
+              src={`https://twitframe.com/show?url=${encodeURIComponent(currentVideo.val)}`}
+              className="w-full h-full border-none shadow-2xl"
+              allow="autoplay; encrypted-media; fullscreen"
+              onLoad={(e: any) => {
+                // Twitter embeds are notoriously hard to loop/control without APIs
+                // But we can reload them when needed via playCount key
+              }}
+            />
+          </div>
+        ) : (
+          <div className="w-full h-full bg-black flex items-center justify-center" key={`${currentVideo.id}-${playCount}`}>
+            <video
+              src={currentVideo?.val}
+              autoPlay
+              muted={false}
+              controls
+              className="w-full h-full object-contain"
+              onEnded={handleNext}
+              onLoadedMetadata={(e: any) => {
+                if (currentVideo.startTime) e.target.currentTime = currentVideo.startTime;
+              }}
+              onTimeUpdate={(e: any) => {
+                if (currentVideo.endTime && e.target.currentTime >= currentVideo.endTime) {
+                  handleNext();
+                }
+              }}
             />
           </div>
         )}
@@ -402,13 +462,15 @@ export default function Player() {
             >
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
-            <button 
-              onClick={toggleGlobalLoop}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${loopPlaylist ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-white/5 text-zinc-500'}`}
-            >
-              <Disc className={`w-3.5 h-3.5 ${loopPlaylist && 'animate-spin'}`} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Loop</span>
-            </button>
+            {appUser && (
+              <button 
+                onClick={toggleGlobalLoop}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${loopPlaylist ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-white/5 text-zinc-500'}`}
+              >
+                <Disc className={`w-3.5 h-3.5 ${loopPlaylist && 'animate-spin'}`} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Loop</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -460,27 +522,29 @@ export default function Player() {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => {
-                       setEditingVideo(v);
-                       setEditTitle(v.title);
-                       setEditUrl(v.url);
-                       setEditStartTime(fromSeconds(v.startTime || 0));
-                       setEditEndTime(fromSeconds(v.endTime || 0));
-                    }}
-                    className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-600 hover:text-white transition-all"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button 
-                    onClick={() => toggleSingleLoop(v)}
-                    className={`p-1.5 rounded-lg transition-all ${v.loopVideo ? 'text-orange-500 bg-orange-500/10' : 'text-zinc-600 hover:text-zinc-400'}`}
-                  >
-                    <Disc className={`w-3.5 h-3.5 ${v.loopVideo && 'animate-spin'}`} />
-                  </button>
-                   {i === currentIndex && <ChevronRight className="w-4 h-4 text-red-600 ml-auto" />}
-                </div>
+                {appUser && (
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => {
+                         setEditingVideo(v);
+                         setEditTitle(v.title);
+                         setEditUrl(v.url);
+                         setEditStartTime(fromSeconds(v.startTime || 0));
+                         setEditEndTime(fromSeconds(v.endTime || 0));
+                      }}
+                      className="p-1.5 hover:bg-white/10 rounded-lg text-zinc-600 hover:text-white transition-all"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button 
+                      onClick={() => toggleSingleLoop(v)}
+                      className={`p-1.5 rounded-lg transition-all ${v.loopVideo ? 'text-orange-500 bg-orange-500/10' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    >
+                      <Disc className={`w-3.5 h-3.5 ${v.loopVideo && 'animate-spin'}`} />
+                    </button>
+                    {i === currentIndex && <ChevronRight className="w-4 h-4 text-red-600 ml-auto" />}
+                  </div>
+                )}
               </div>
             </motion.div>
           ))}
@@ -488,30 +552,44 @@ export default function Player() {
 
         {/* Global Controls */}
         <div className="p-10 bg-black/80 backdrop-blur-3xl border-t border-white/5 flex flex-col gap-8">
-           <div className="flex items-center justify-center gap-6">
-              <button 
-                onClick={handlePrev}
-                className="p-5 bg-zinc-900 hover:bg-zinc-800 rounded-[24px] transition-all group active:scale-90"
-              >
-                <SkipBack className="w-5 h-5 text-zinc-500 group-hover:text-white" />
-              </button>
-              <div 
-                className="p-8 bg-red-600 rounded-[32px] flex items-center justify-center shadow-2xl shadow-red-600/40 active:scale-95 transition-transform cursor-pointer relative group"
-                onClick={handleRefreshVideo} 
-                title="Refresh Current Video"
-              >
-                <div className="absolute inset-x-0 -top-4 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                   <span className="text-[8px] font-black uppercase tracking-widest bg-zinc-900 px-2 py-1 rounded border border-white/5">Restart Source</span>
-                </div>
-                <Play className="w-8 h-8 fill-white text-white translate-x-1" />
+            {appUser && (
+              <div className="flex items-center justify-center gap-4">
+                 <button 
+                   onClick={handlePrev}
+                   className="p-4 bg-zinc-900 hover:bg-zinc-800 rounded-[20px] transition-all group active:scale-90"
+                   title="Previous Video"
+                 >
+                   <SkipBack className="w-4 h-4 text-zinc-500 group-hover:text-white" />
+                 </button>
+                 
+                 <button 
+                   onClick={() => {
+                     setCurrentIndex(0);
+                     setPlayCount(c => c + 1);
+                   }}
+                   className="p-4 bg-zinc-900 hover:bg-zinc-800 rounded-[20px] transition-all group active:scale-90"
+                   title="Restart Playlist"
+                 >
+                   <RefreshCw className="w-4 h-4 text-zinc-500 group-hover:text-blue-400" />
+                 </button>
+
+                 <div 
+                   className="p-6 bg-red-600 rounded-[28px] flex items-center justify-center shadow-2xl shadow-red-600/40 active:scale-95 transition-transform cursor-pointer relative group"
+                   onClick={handleRefreshVideo} 
+                   title="Restart Current Source"
+                 >
+                   <Play className="w-6 h-6 fill-white text-white translate-x-1" />
+                 </div>
+
+                 <button 
+                   onClick={handleNext}
+                   className="p-4 bg-zinc-900 hover:bg-zinc-800 rounded-[20px] transition-all group active:scale-90"
+                   title="Next Video"
+                 >
+                   <SkipForward className="w-4 h-4 text-zinc-500 group-hover:text-white" />
+                 </button>
               </div>
-              <button 
-                onClick={handleNext}
-                className="p-5 bg-zinc-900 hover:bg-zinc-800 rounded-[24px] transition-all group active:scale-90"
-              >
-                <SkipForward className="w-5 h-5 text-zinc-500 group-hover:text-white" />
-              </button>
-           </div>
+            )}
 
            <div className="flex flex-col gap-2 px-4">
               <div className="flex items-center justify-between text-[10px] font-black text-zinc-600 uppercase tracking-widest">
