@@ -271,6 +271,17 @@ export default function ChannelDetail() {
     });
   };
 
+  const handlePlayVideo = async (v: Video) => {
+    if (!channelId) return;
+    await updateDoc(doc(db, "channels", channelId), {
+      syncTrigger: {
+        type: 'PLAY_VIDEO',
+        videoId: v.id,
+        timestamp: serverTimestamp()
+      }
+    });
+  };
+
   const deleteVideo = async (id: string) => {
     if (!channelId || !confirm("Delete this video?")) return;
     await deleteDoc(doc(db, "channels", channelId, "videos", id));
@@ -383,6 +394,13 @@ export default function ChannelDetail() {
                     </div>
 
                     <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => handlePlayVideo(video)}
+                        className="p-2.5 bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white rounded-xl transition-all"
+                        title="Play Now (Sync All)"
+                      >
+                        <Play className="w-4 h-4 fill-current" />
+                      </button>
                       <button 
                         onClick={() => openEditModal(video)}
                         className="p-2.5 text-zinc-700 hover:text-white hover:bg-white/10 rounded-xl transition-all"

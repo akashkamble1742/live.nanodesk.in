@@ -50,6 +50,7 @@ export default function Player() {
   const [channelName, setChannelName] = useState("Loading...");
   const [channelId, setChannelId] = useState("");
   const [loopPlaylist, setLoopPlaylist] = useState(false);
+  const [targetVideoId, setTargetVideoId] = useState<string | null>(null);
   
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -134,6 +135,12 @@ export default function Player() {
               setPlayCount(c => c + 1);
             } else if (type === 'RESTART_VIDEO') {
               setPlayCount(c => c + 1);
+            } else if (type === 'PLAY_VIDEO') {
+              const vId = data.syncTrigger.videoId;
+              // We need the latest videos array here, but videos are loaded in another effect.
+              // We'll use a signal to trigger a search in the next render or use a ref.
+              // Actually, we can just find it in the current state if it's already there.
+              setTargetVideoId(vId);
             }
           }
         }
@@ -236,6 +243,17 @@ export default function Player() {
     setIsRefreshing(true);
     // Force a re-sync by resetting and letting onSnapshot handle it
     setTimeout(() => setIsRefreshing(false), 800);
+  };
+
+  const handlePlaySpecificVideo = async (vId: string) => {
+    if (!channelId) return;
+    await updateDoc(doc(db, "channels", channelId), {
+      syncTrigger: {
+        type: 'PLAY_VIDEO',
+        videoId: vId,
+        timestamp: serverTimestamp()
+      }
+    });
   };
 
   const handleRefreshVideo = () => {
@@ -377,6 +395,17 @@ export default function Player() {
       if (fbIntervalRef.current) clearInterval(fbIntervalRef.current);
     };
   }, [currentIndex, currentVideo?.id, currentVideo?.val, currentVideo?.startTime, currentVideo?.endTime, playCount]);
+
+  useEffect(() => {
+    if (targetVideoId && videos.length > 0) {
+      const idx = videos.findIndex(v => v.id === targetVideoId);
+      if (idx !== -1) {
+        setCurrentIndex(idx);
+        setPlayCount(c => c + 1);
+      }
+      setTargetVideoId(null);
+    }
+  }, [targetVideoId, videos]);
 
   if (videos.length === 0) {
     return (
@@ -524,6 +553,13 @@ export default function Player() {
                 
                 {appUser && (
                   <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => handlePlaySpecificVideo(v.id)}
+                      className={`p-1.5 rounded-lg transition-all ${i === currentIndex ? 'bg-red-600 text-white' : 'bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white'}`}
+                      title="Play Now (Sync All)"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                    </button>
                     <button 
                       onClick={() => {
                          setEditingVideo(v);

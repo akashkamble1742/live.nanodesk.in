@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../hooks/useAuth";
-import { Plus, Trash2, ExternalLink, Tv, Radio } from "lucide-react";
+import { Plus, Trash2, ExternalLink, Tv, Radio, Edit2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -20,6 +20,8 @@ export default function AdminDashboard() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [editChannelName, setEditChannelName] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -51,6 +53,25 @@ export default function AdminDashboard() {
       setIsAdding(false);
     } catch (err) {
       console.error("Create channel error:", err);
+    }
+  };
+
+  const handleUpdateChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editChannelName || !user || !editingChannel || appUser?.role !== 'admin') return;
+
+    const slug = editChannelName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    
+    try {
+      await updateDoc(doc(db, "channels", editingChannel.id), {
+        name: editChannelName,
+        slug,
+        updatedAt: serverTimestamp()
+      });
+      setEditChannelName("");
+      setEditingChannel(null);
+    } catch (err) {
+      console.error("Update channel error:", err);
     }
   };
 
@@ -134,6 +155,62 @@ export default function AdminDashboard() {
             </motion.div>
           </motion.div>
         )}
+        {editingChannel && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-zinc-900 border border-white/5 p-10 rounded-[32px] max-w-md w-full shadow-2xl relative overflow-hidden"
+            >
+               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[100px] -mr-32 -mt-32" />
+               
+               <div className="relative space-y-8">
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-500">Configuration</span>
+                    <h2 className="text-3xl font-black italic uppercase tracking-tighter">Edit Station</h2>
+                  </div>
+
+                  <form onSubmit={handleUpdateChannel} className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">New Broadcast Name</label>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editChannelName}
+                        onChange={(e) => setEditChannelName(e.target.value)}
+                        placeholder="ENTER STATION NAME..."
+                        className="w-full bg-black border border-white/5 p-6 rounded-2xl text-xl font-black uppercase tracking-tight focus:border-blue-600 outline-none transition-all placeholder:text-zinc-800"
+                        required
+                      />
+                      <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-wider mt-2">Warning: Changing name will update the public link slug.</p>
+                    </div>
+                    
+                    <div className="flex gap-4">
+                       <button
+                         type="button"
+                         onClick={() => setEditingChannel(null)}
+                         className="flex-1 py-4 px-6 rounded-2xl font-black uppercase tracking-widest text-[10px] bg-zinc-800 hover:bg-zinc-700 transition-all shadow-xl"
+                       >
+                         Abort
+                       </button>
+                       <button
+                         type="submit"
+                         className="flex-[2] py-4 px-6 rounded-2xl font-black uppercase tracking-widest text-[10px] bg-blue-600 text-white hover:bg-blue-500 transition-all shadow-[0_0_30px_rgba(59,130,246,0.3)] shadow-blue-600/20 active:scale-95"
+                       >
+                         Commit Changes
+                       </button>
+                    </div>
+                  </form>
+               </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
@@ -183,12 +260,27 @@ export default function AdminDashboard() {
                   <ExternalLink className="w-3.5 h-3.5" /> Public Link
                 </Link>
                 {appUser?.role === 'admin' && (
-                  <button 
-                    onClick={(e) => handleDeleteChannel(channel.id, e)}
-                    className="p-2 text-zinc-700 hover:text-red-600 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingChannel(channel);
+                        setEditChannelName(channel.name);
+                      }}
+                      className="p-2 text-zinc-700 hover:text-blue-500 transition-colors"
+                      title="Edit Name"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={(e) => handleDeleteChannel(channel.id, e)}
+                      className="p-2 text-zinc-700 hover:text-red-600 transition-colors"
+                      title="Delete Station"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
