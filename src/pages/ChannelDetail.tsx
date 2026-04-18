@@ -799,37 +799,72 @@ export default function ChannelDetail() {
 
 function LivePreview({ video, status, onSeek }: { video: Video, status: any, onSeek: (time: number) => void }) {
   const playerRef = useRef<any>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [playerReady, setPlayerReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!video) return;
-    
-    // Reset player ref when source changes
+    setPlayerReady(false);
+    setError(null);
     playerRef.current = null;
 
-    if (video.type === 'yt' && window.YT) {
-      const container = document.getElementById(`preview-player-${video.id}`);
-      if (container) {
-        new window.YT.Player(`preview-player-${video.id}`, {
-          height: '100%',
-          width: '100%',
-          videoId: video.val,
-          playerVars: { autoplay: 1, controls: 1, modestbranding: 1, start: Math.floor(status.time) },
-          events: {
-            onReady: (event: any) => { 
+    const initPlayer = () => {
+      if (video.type === 'yt' && window.YT && window.YT.Player) {
+        try {
+          new window.YT.Player(`preview-player-${video.id}`, {
+            height: '100%',
+            width: '100%',
+            videoId: video.val,
+            playerVars: { 
+              autoplay: 1, 
+              controls: 1, 
+              modestbranding: 1, 
+              start: Math.floor(status.time),
+              origin: window.location.origin
+            },
+            events: {
+              onReady: (event: any) => { 
                 playerRef.current = event.target;
-                event.target.mute(); // Mute preview by default
+                event.target.mute();
+                setPlayerReady(true);
+              },
+              onError: () => setError("Flash Feed Error")
             }
-          }
-        });
+          });
+        } catch (e) {
+          setError("Initialization Failed");
+        }
       }
+    };
+
+    if (window.YT && window.YT.Player) {
+      initPlayer();
+    } else {
+      const checkInterval = setInterval(() => {
+        if (window.YT && window.YT.Player) {
+          initPlayer();
+          clearInterval(checkInterval);
+        }
+      }, 500);
+      return () => clearInterval(checkInterval);
     }
   }, [video?.id]);
 
   return (
-    <div className="w-full h-full relative group">
+    <div className="w-full h-full relative group bg-zinc-950">
+       {/* Hardware Style Grid Overlay */}
+       <div className="absolute inset-0 pointer-events-none z-10 opacity-20" 
+            style={{ backgroundImage: 'radial-gradient(circle, #3b82f6 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+       
        {video?.type === 'yt' && (
-          <div id={`preview-player-${video.id}`} className="w-full h-full" />
+          <div className="w-full h-full">
+            <div id={`preview-player-${video.id}`} className="w-full h-full" />
+            {!playerReady && !error && (
+              <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
+                <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
+              </div>
+            )}
+          </div>
        )}
        
        {video?.type === 'generic' && (
@@ -839,35 +874,52 @@ function LivePreview({ video, status, onSeek }: { video: Video, status: any, onS
            autoPlay 
            muted 
            controls 
-           className="w-full h-full object-contain"
-           onLoadedMetadata={(e: any) => e.target.currentTime = status.time}
+           className="w-full h-full object-contain relative z-0"
+           onLoadedMetadata={(e: any) => {
+             e.target.currentTime = status.time;
+             setPlayerReady(true);
+           }}
+           onError={() => setError("Generic Stream Failed")}
          />
        )}
 
-       {video?.type === 'fb' && (
-         <div className="w-full h-full bg-zinc-950 flex flex-col items-center justify-center text-center p-6 gap-4">
-           <Facebook className="w-12 h-12 text-zinc-900" />
-           <p className="text-[10px] font-black uppercase text-zinc-700 tracking-widest max-w-[200px]">
-             Facebook API restricts remote monitoring. Use Master Commands to sync.
-           </p>
+       {error && (
+         <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/20 backdrop-blur-sm z-20">
+            <Radio className="w-10 h-10 text-red-500 mb-2 opacity-50" />
+            <span className="text-[10px] font-black uppercase text-red-500 tracking-[0.3em]">{error}</span>
          </div>
        )}
 
-       {video?.type === 'x' && (
-         <div className="w-full h-full bg-zinc-950 flex flex-col items-center justify-center text-center p-6 gap-4">
-           <Radio className="w-12 h-12 text-zinc-900" />
-           <p className="text-[10px] font-black uppercase text-zinc-700 tracking-widest max-w-[200px]">
-             X (Twitter) Feed is restricted to output display only.
-           </p>
+       {(video?.type === 'fb' || video?.type === 'x') && (
+         <div className="w-full h-full bg-zinc-950 flex flex-col items-center justify-center text-center p-8 gap-6 relative">
+           <div className="w-16 h-16 rounded-full border border-zinc-900 flex items-center justify-center animate-pulse">
+             {video.type === 'fb' ? <Facebook className="w-6 h-6 text-zinc-800" /> : <Radio className="w-6 h-6 text-zinc-800" />}
+           </div>
+           <div className="space-y-2">
+             <p className="text-[10px] font-black uppercase text-zinc-600 tracking-widest max-w-[240px]">
+               Social Stream Monitor Restricted
+             </p>
+             <p className="text-[8px] font-bold text-zinc-800 uppercase tracking-tighter">
+               API Constraints prevent nested XFBML monitoring
+             </p>
+           </div>
+           <div className="absolute top-4 right-4 flex items-center gap-2">
+              <div className="w-1 h-1 bg-zinc-800 rounded-full" />
+              <span className="text-[8px] font-mono text-zinc-800">ENC_0x44</span>
+           </div>
          </div>
        )}
 
        {/* Control Overlay */}
-       <div className="absolute inset-x-0 bottom-0 p-4 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all z-10">
-          <div className="bg-black/80 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4">
-             <div className="flex flex-col gap-0.5">
-                <span className="text-[8px] font-black uppercase text-blue-500 tracking-[0.2em]">Sync Authority</span>
-                <span className="text-[10px] font-bold text-white">Remote Control Active</span>
+       <div className="absolute inset-x-4 bottom-4 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all z-30">
+          <div className="bg-zinc-900/90 backdrop-blur-2xl border border-white/5 p-4 rounded-3xl shadow-2xl flex items-center justify-between gap-6 overflow-hidden relative">
+             <div className="absolute top-0 left-0 w-1 h-full bg-blue-600" />
+             <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                   <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                   <span className="text-[9px] font-black uppercase text-blue-500 tracking-[0.2em]">Authority Monitor</span>
+                </div>
+                <span className="text-[8px] font-black text-zinc-500 uppercase">Master Sync Protocol v1.4</span>
              </div>
              <button 
                onClick={() => {
@@ -879,10 +931,10 @@ function LivePreview({ video, status, onSeek }: { video: Video, status: any, onS
                  }
                  if (currentTime > 0) onSeek(currentTime);
                }}
-               className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center gap-2"
+               className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-2xl text-[9px] font-black uppercase transition-all shadow-[0_10px_20px_rgba(37,99,235,0.3)] active:scale-95 flex items-center gap-3 group"
              >
-               <RefreshCw className="w-3 h-3" />
-               Force Sync All
+               <RefreshCw className="w-3 h-3 group-hover:rotate-180 transition-transform duration-700" />
+               Force Sync Output
              </button>
           </div>
        </div>
