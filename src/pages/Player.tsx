@@ -22,16 +22,21 @@ interface Video {
   val: string;
   order: number;
   active: boolean;
+  startTime?: number;
+  endTime?: number;
 }
 
 export default function Player() {
   const { channelSlug } = useParams();
   const [videos, setVideos] = useState<Video[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [playCount, setPlayCount] = useState(0);
   const [channelName, setChannelName] = useState("Loading...");
+  const [loopPlaylist, setLoopPlaylist] = useState(false);
   
   const ytPlayerRef = useRef<any>(null);
   const fbPlayerRef = useRef<any>(null);
+  const fbIntervalRef = useRef<any>(null);
 
   // 1. Fetch Channel and Playlist
   useEffect(() => {
@@ -42,6 +47,7 @@ export default function Player() {
       if (!snapshot.empty) {
         const channelDoc = snapshot.docs[0];
         setChannelName(channelDoc.data().name);
+        setLoopPlaylist(channelDoc.data().loopPlaylist || false);
 
         const videosQuery = query(
           collection(db, "channels", channelDoc.id, "videos"), 
@@ -98,7 +104,19 @@ export default function Player() {
     };
   }, []);
 
-  const handleNext = () => setCurrentIndex((p) => (p + 1) % videos.length);
+  const handleNext = () => {
+    setCurrentIndex((p) => {
+      if (p === videos.length - 1) {
+        if (loopPlaylist) {
+          setPlayCount(c => c + 1);
+          return 0;
+        }
+        return p;
+      }
+      return p + 1;
+    });
+  };
+  
   const handlePrev = () => setCurrentIndex((p) => (p - 1 + videos.length) % videos.length);
 
   const currentVideo = videos[currentIndex];
@@ -106,13 +124,26 @@ export default function Player() {
   useEffect(() => {
     if (!currentVideo) return;
 
+    if (fbIntervalRef.current) clearInterval(fbIntervalRef.current);
+
     if (currentVideo.type === 'yt' && window.YT && window.YT.Player) {
+      const playerVars: any = { 
+        autoplay: 1, 
+        controls: 1, 
+        rel: 0, 
+        fs: 1, 
+        modestbranding: 1,
+      };
+
+      if (currentVideo.startTime) playerVars.start = currentVideo.startTime;
+      if (currentVideo.endTime) playerVars.end = currentVideo.endTime;
+
       if (!ytPlayerRef.current) {
         ytPlayerRef.current = new window.YT.Player('yt-player-target', {
           height: '1080',
           width: '1920',
           videoId: currentVideo.val,
-          playerVars: { autoplay: 1, controls: 1, rel: 0, fs: 1, modestbranding: 1 },
+          playerVars,
           events: {
             onStateChange: (event: any) => {
               if (event.data === window.YT.PlayerState.ENDED) handleNext();
@@ -120,14 +151,34 @@ export default function Player() {
           }
         });
       } else {
-        ytPlayerRef.current.loadVideoById(currentVideo.val);
+        ytPlayerRef.current.loadVideoById({
+          videoId: currentVideo.val,
+          startSeconds: currentVideo.startTime || 0,
+          endSeconds: currentVideo.endTime || undefined
+        });
       }
     }
 
     if (currentVideo.type === 'fb' && window.FB) {
       setTimeout(() => window.FB.XFBML.parse(), 100);
+
+      // Facebook Trimming Handler
+      if (currentVideo.endTime) {
+        fbIntervalRef.current = setInterval(() => {
+          if (fbPlayerRef.current) {
+            const currentPos = fbPlayerRef.current.getCurrentPosition();
+            if (currentPos >= currentVideo.endTime!) {
+              handleNext();
+            }
+          }
+        }, 1000);
+      }
     }
-  }, [currentIndex, currentVideo]);
+
+    return () => {
+      if (fbIntervalRef.current) clearInterval(fbIntervalRef.current);
+    };
+  }, [currentIndex, currentVideo, loopPlaylist, playCount]);
 
   if (videos.length === 0) {
     return (

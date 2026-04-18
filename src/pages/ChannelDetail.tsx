@@ -13,12 +13,15 @@ interface Video {
   val: string;
   order: number;
   active: boolean;
+  startTime?: number;
+  endTime?: number;
 }
 
 interface Channel {
   id: string;
   name: string;
   slug: string;
+  loopPlaylist?: boolean;
 }
 
 export default function ChannelDetail() {
@@ -27,10 +30,14 @@ export default function ChannelDetail() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [newVideoTitle, setNewVideoTitle] = useState("");
+  const [newStartTime, setNewStartTime] = useState("");
+  const [newEndTime, setNewEndTime] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editUrl, setEditUrl] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
 
   useEffect(() => {
     if (!channelId) return;
@@ -79,10 +86,14 @@ export default function ChannelDetail() {
         val,
         order: videos.length,
         active: true,
+        startTime: Number(newStartTime) || 0,
+        endTime: Number(newEndTime) || 0,
         updatedAt: serverTimestamp()
       });
       setNewVideoUrl("");
       setNewVideoTitle("");
+      setNewStartTime("");
+      setNewEndTime("");
       setIsAdding(false);
     } catch (err) {
       console.error("Add video error:", err);
@@ -114,6 +125,8 @@ export default function ChannelDetail() {
         url: editUrl,
         type,
         val,
+        startTime: Number(editStartTime) || 0,
+        endTime: Number(editEndTime) || 0,
         updatedAt: serverTimestamp()
       });
       setEditingVideo(null);
@@ -126,6 +139,16 @@ export default function ChannelDetail() {
     setEditingVideo(v);
     setEditTitle(v.title);
     setEditUrl(v.url);
+    setEditStartTime(v.startTime?.toString() || "0");
+    setEditEndTime(v.endTime?.toString() || "0");
+  };
+
+  const toggleLoop = async () => {
+    if (!channelId || !channel) return;
+    await updateDoc(doc(db, "channels", channelId), {
+      loopPlaylist: !channel.loopPlaylist
+    });
+    setChannel({ ...channel, loopPlaylist: !channel.loopPlaylist });
   };
 
   const toggleActive = async (v: Video) => {
@@ -229,7 +252,14 @@ export default function ChannelDetail() {
                       </div>
                       <div className="flex flex-col">
                         <span className="font-black uppercase tracking-tighter text-zinc-200">{video.title}</span>
-                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest truncate max-w-[200px] sm:max-w-md">{video.url}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest truncate max-w-[150px]">{video.url}</span>
+                          {(video.startTime || video.endTime) ? (
+                            <span className="text-[10px] text-red-500 font-black uppercase tracking-widest bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
+                              {video.startTime || 0}s ➔ {video.endTime || 'END'}s
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
 
@@ -266,6 +296,18 @@ export default function ChannelDetail() {
            <div className="bg-zinc-900 border border-white/5 rounded-[32px] p-8 shadow-2xl">
               <h3 className="text-xl font-black italic uppercase tracking-tighter mb-6">Quick Settings</h3>
               <div className="space-y-4">
+                 <button 
+                   onClick={toggleLoop}
+                   className={`flex items-center justify-between w-full p-6 border rounded-[24px] transition-all group ${channel.loopPlaylist ? 'bg-red-600/10 border-red-500/40' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06]'}`}
+                 >
+                    <div className="flex items-center gap-3">
+                       <Disc className={`w-5 h-5 ${channel.loopPlaylist ? 'text-red-500 animate-spin' : 'text-zinc-600'}`} />
+                       <span className={`font-black text-sm uppercase italic tracking-tighter ${channel.loopPlaylist ? 'text-red-500' : 'text-zinc-400'}`}>Loop Playlist</span>
+                    </div>
+                    <div className={`w-10 h-5 rounded-full relative transition-colors ${channel.loopPlaylist ? 'bg-red-600' : 'bg-zinc-800'}`}>
+                       <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${channel.loopPlaylist ? 'right-1' : 'left-1'}`} />
+                    </div>
+                 </button>
                  <Link 
                    to={`/play/${channel.slug}`}
                    target="_blank"
@@ -322,6 +364,31 @@ export default function ChannelDetail() {
                       placeholder="Paste link here..."
                     />
                   </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Start At (Seconds)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newStartTime}
+                        onChange={(e) => setNewStartTime(e.target.value)}
+                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">End At (Seconds)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newEndTime}
+                        onChange={(e) => setNewEndTime(e.target.value)}
+                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
+                        placeholder="Leave 0 for full"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex gap-4 pt-4">
@@ -374,6 +441,29 @@ export default function ChannelDetail() {
                       onChange={(e) => setEditUrl(e.target.value)}
                       className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Start At (Seconds)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editStartTime}
+                        onChange={(e) => setEditStartTime(e.target.value)}
+                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">End At (Seconds)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editEndTime}
+                        onChange={(e) => setEditEndTime(e.target.value)}
+                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
+                      />
+                    </div>
                   </div>
                 </div>
 
