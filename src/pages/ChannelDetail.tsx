@@ -33,8 +33,32 @@ interface Channel {
 
 // Time Helpers
 const toSeconds = (hms: string) => {
-  const [h, m, s] = hms.split(':').map(Number);
-  return (h * 3600) + (m * 60) + s;
+  if (!hms || typeof hms !== 'string') return 0;
+  
+  // Clean the string (remove non-digits and colons)
+  const clean = hms.replace(/[^0-9:]/g, '');
+  if (!clean) return 0;
+
+  const parts = clean.split(':').map(Number);
+  
+  // Standard H:M:S format support
+  if (parts.length === 3) {
+    const [h, m, s] = parts;
+    return (Number(h || 0) * 3600) + (Number(m || 0) * 60) + Number(s || 0);
+  }
+  
+  // M:S format support
+  if (parts.length === 2) {
+    const [m, s] = parts;
+    return (Number(m || 0) * 60) + Number(s || 0);
+  }
+
+  // Single number (assume seconds)
+  if (parts.length === 1) {
+    return Number(parts[0] || 0);
+  }
+
+  return 0;
 };
 
 const fromSeconds = (seconds: number) => {
@@ -55,6 +79,7 @@ export default function ChannelDetail() {
   const [totalDuration, setTotalDuration] = useState(0);
   const [isFetching, setIsFetching] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editUrl, setEditUrl] = useState("");
@@ -145,6 +170,7 @@ export default function ChannelDetail() {
     }
 
     try {
+      setIsSubmitting(true);
       await addDoc(collection(db, "channels", channelId, "videos"), {
         title: newVideoTitle || (type === 'yt' ? "YouTube Video" : type === 'fb' ? "Facebook Video" : type === 'x' ? "X/Twitter Video" : "External Video"),
         url: newVideoUrl,
@@ -165,6 +191,9 @@ export default function ChannelDetail() {
       setIsAdding(false);
     } catch (err) {
       console.error("Add video error:", err);
+      alert("Failed to integrate source. Please check your connection.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -265,6 +294,7 @@ export default function ChannelDetail() {
     }
 
     try {
+      setIsSubmitting(true);
       await updateDoc(doc(db, "channels", channelId, "videos", editingVideo.id), {
         title: editTitle,
         url: editUrl,
@@ -277,6 +307,9 @@ export default function ChannelDetail() {
       setEditingVideo(null);
     } catch (err) {
       console.error("Update video error:", err);
+      alert("Failed to commit changes.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -628,10 +661,9 @@ export default function ChannelDetail() {
               <form onSubmit={handleAddVideo} className="space-y-8">
                 <div className="space-y-6">
                   <div>
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Content Label</label>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Content Label (Optional)</label>
                     <input
                       type="text"
-                      required
                       value={newVideoTitle}
                       onChange={(e) => setNewVideoTitle(e.target.value)}
                       className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
@@ -698,9 +730,10 @@ export default function ChannelDetail() {
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 px-6 py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-red-600/20"
+                    disabled={isSubmitting}
+                    className="flex-1 px-6 py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-red-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Integrate
+                    {isSubmitting ? 'Integrating...' : 'Integrate'}
                   </button>
                 </div>
               </form>
@@ -720,10 +753,9 @@ export default function ChannelDetail() {
               <form onSubmit={handleUpdateVideo} className="space-y-8">
                 <div className="space-y-6">
                   <div>
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Content Label</label>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Content Label (Optional)</label>
                     <input
                       type="text"
-                      required
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
                       className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
@@ -783,9 +815,10 @@ export default function ChannelDetail() {
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 px-6 py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-red-600/20"
+                    disabled={isSubmitting}
+                    className="flex-1 px-6 py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-red-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Commit Changes
+                    {isSubmitting ? 'Saving...' : 'Commit Changes'}
                   </button>
                 </div>
               </form>
