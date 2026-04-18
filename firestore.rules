@@ -38,7 +38,10 @@ service cloud.firestore {
           && data.type in ['yt', 'fb']
           && data.val is string && data.val.size() > 0 && data.val.size() <= 200
           && data.order is number
-          && data.active is bool;
+          && data.active is bool
+          && (data.startTime == null || data.startTime is number)
+          && (data.endTime == null || data.endTime is number)
+          && (data.loopVideo == null || data.loopVideo is bool);
     }
 
     function isValidAppUser(data) {
@@ -66,7 +69,7 @@ service cloud.firestore {
                       (get(/databases/$(database)/documents/channels/$(channelId)).data.ownerId == request.auth.uid || isAdmin());
         allow update: if isEmailVerified() && isValidVideo(incoming()) && (
           (get(/databases/$(database)/documents/channels/$(channelId)).data.ownerId == request.auth.uid || isAdmin()) &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'url', 'type', 'val', 'order', 'active', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'url', 'type', 'val', 'order', 'active', 'updatedAt', 'startTime', 'endTime', 'loopVideo'])
         );
         allow delete: if isEmailVerified() && (get(/databases/$(database)/documents/channels/$(channelId)).data.ownerId == request.auth.uid || isAdmin());
       }

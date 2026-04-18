@@ -119,12 +119,11 @@ export default function ChannelDetail() {
     }
   };
 
-  const handleFetchDuration = () => {
-    const id = ytId(newVideoUrl);
+  const handleFetchDuration = (url: string, isEdit = false) => {
+    const id = ytId(url);
     if (!id) return;
     
     setIsFetching(true);
-    // Create a hidden div for YT player if it doesn't exist
     let fetcher = document.getElementById('temp-duration-fetcher');
     if (!fetcher) {
       fetcher = document.createElement('div');
@@ -133,31 +132,30 @@ export default function ChannelDetail() {
       document.body.appendChild(fetcher);
     }
 
-    const player = new window.YT.Player('temp-duration-fetcher', {
+    new window.YT.Player('temp-duration-fetcher', {
       height: '0',
       width: '0',
       videoId: id,
       events: {
         onReady: (event: any) => {
           const duration = Math.floor(event.target.getDuration());
-          setTotalDuration(duration);
-          setNewEndTime(fromSeconds(duration));
+          if (isEdit) {
+            setEditEndTime(fromSeconds(duration));
+          } else {
+            setTotalDuration(duration);
+            setNewEndTime(fromSeconds(duration));
+          }
           setIsFetching(false);
           event.target.destroy();
         },
-        onError: () => {
-          setIsFetching(false);
-        }
+        onError: () => setIsFetching(false)
       }
     });
   };
 
   useEffect(() => {
     if (newVideoUrl.includes('youtu')) {
-      const id = ytId(newVideoUrl);
-      if (id && window.YT) {
-        handleFetchDuration();
-      }
+      handleFetchDuration(newVideoUrl, false);
     }
   }, [newVideoUrl]);
 
@@ -525,12 +523,19 @@ export default function ChannelDetail() {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Media URL</label>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] block">Media URL</label>
+                      {isFetching && <span className="text-[8px] text-red-500 animate-pulse font-black uppercase">Fetching...</span>}
+                    </div>
                     <input
                       type="text"
                       required
                       value={editUrl}
-                      onChange={(e) => setEditUrl(e.target.value)}
+                      onChange={(e) => {
+                        const url = e.target.value;
+                        setEditUrl(url);
+                        if (url.includes('youtu')) handleFetchDuration(url, true);
+                      }}
                       className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
                     />
                   </div>
