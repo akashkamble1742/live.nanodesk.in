@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -9,7 +9,7 @@ interface Video {
   id: string;
   title: string;
   url: string;
-  type: 'yt' | 'fb';
+  type: 'yt' | 'fb' | 'x' | 'generic';
   val: string;
   order: number;
   active: boolean;
@@ -23,6 +23,12 @@ interface Channel {
   name: string;
   slug: string;
   loopPlaylist?: boolean;
+  masterControl?: boolean;
+  playbackStatus?: {
+    index: number;
+    time: number;
+    updatedAt: any;
+  };
 }
 
 // Time Helpers
@@ -59,8 +65,10 @@ export default function ChannelDetail() {
   useEffect(() => {
     if (!channelId) return;
 
-    getDoc(doc(db, "channels", channelId)).then(s => {
-      if (s.exists()) setChannel({ id: s.id, ...s.data() } as Channel);
+    const unsubChannel = onSnapshot(doc(db, "channels", channelId), (snapshot) => {
+      if (snapshot.exists()) {
+        setChannel({ id: snapshot.id, ...snapshot.data() } as Channel);
+      }
     });
 
     const q = query(collection(db, "channels", channelId, "videos"), orderBy("order", "asc"));
@@ -68,7 +76,10 @@ export default function ChannelDetail() {
       setVideos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Video)));
     });
 
-    return unsubscribe;
+    return () => {
+      unsubChannel();
+      unsubscribe();
+    };
   }, [channelId]);
 
   const ytId = (url: string) => {
@@ -282,6 +293,24 @@ export default function ChannelDetail() {
     });
   };
 
+  const handleMasterSeek = async (time: number) => {
+    if (!channelId || !channel?.masterControl) return;
+    await updateDoc(doc(db, "channels", channelId), {
+      syncTrigger: {
+        type: 'SEEK_TO',
+        time,
+        timestamp: serverTimestamp()
+      }
+    });
+  };
+
+  const toggleMasterControl = async () => {
+    if (!channel || !channelId) return;
+    await updateDoc(doc(db, "channels", channelId), {
+      masterControl: !channel.masterControl
+    });
+  };
+
   const deleteVideo = async (id: string) => {
     if (!channelId || !confirm("Delete this video?")) return;
     await deleteDoc(doc(db, "channels", channelId, "videos", id));
@@ -437,9 +466,54 @@ export default function ChannelDetail() {
         </div>
 
         <div className="space-y-8">
+           {channel?.masterControl && channel.playbackStatus && (
+             <div className="bg-zinc-900 border border-blue-500/20 rounded-[32px] p-6 shadow-2xl relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-1 h-full bg-blue-600" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">Live Monitor</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-500">Master Sync Enabled</span>
+                </div>
+                
+                <div className="aspect-video bg-black rounded-2xl overflow-hidden relative mb-4">
+                  <LivePreview 
+                    video={videos[channel.playbackStatus.index]} 
+                    status={channel.playbackStatus} 
+                    onSeek={handleMasterSeek}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between px-2">
+                   <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase text-zinc-500 tracking-tighter">Current Source</span>
+                      <span className="text-xs font-bold truncate max-w-[200px]">{videos[channel.playbackStatus.index]?.title || 'No Source'}</span>
+                   </div>
+                   <div className="text-right">
+                      <span className="text-[10px] font-black uppercase text-zinc-500 tracking-tighter">Live Time</span>
+                      <div className="text-sm font-black italic text-blue-500">{fromSeconds(Math.floor(channel.playbackStatus.time))}</div>
+                   </div>
+                </div>
+             </div>
+           )}
+
            <div className="bg-zinc-900 border border-white/5 rounded-[32px] p-8 shadow-2xl">
               <h3 className="text-xl font-black italic uppercase tracking-tighter mb-6">Quick Settings</h3>
               <div className="space-y-4">
+                 <button 
+                   onClick={toggleMasterControl}
+                   className={`flex items-center justify-between w-full p-6 border rounded-[24px] transition-all group ${channel?.masterControl ? 'bg-blue-600/10 border-blue-500/40' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06]'}`}
+                 >
+                    <div className="flex items-center gap-3">
+                       <Radio className={`w-5 h-5 ${channel?.masterControl ? 'text-blue-500' : 'text-zinc-600'}`} />
+                       <span className={`font-black text-sm uppercase italic tracking-tighter ${channel?.masterControl ? 'text-blue-500' : 'text-zinc-400'}`}>Master Control</span>
+                    </div>
+                    <div className={`w-10 h-5 rounded-full relative transition-colors ${channel?.masterControl ? 'bg-blue-600' : 'bg-zinc-800'}`}>
+                       <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${channel?.masterControl ? 'right-1' : 'left-1'}`} />
+                    </div>
+                 </button>
+
                  <button 
                    onClick={toggleLoop}
                    className={`flex items-center justify-between w-full p-6 border rounded-[24px] transition-all group ${channel.loopPlaylist ? 'bg-red-600/10 border-red-500/40' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06]'}`}
@@ -675,6 +749,99 @@ export default function ChannelDetail() {
           </div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function LivePreview({ video, status, onSeek }: { video: Video, status: any, onSeek: (time: number) => void }) {
+  const playerRef = useRef<any>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    if (!video) return;
+    
+    // Reset player ref when source changes
+    playerRef.current = null;
+
+    if (video.type === 'yt' && window.YT) {
+      const container = document.getElementById(`preview-player-${video.id}`);
+      if (container) {
+        new window.YT.Player(`preview-player-${video.id}`, {
+          height: '100%',
+          width: '100%',
+          videoId: video.val,
+          playerVars: { autoplay: 1, controls: 1, modestbranding: 1, start: Math.floor(status.time) },
+          events: {
+            onReady: (event: any) => { 
+                playerRef.current = event.target;
+                event.target.mute(); // Mute preview by default
+            }
+          }
+        });
+      }
+    }
+  }, [video?.id]);
+
+  return (
+    <div className="w-full h-full relative group">
+       {video?.type === 'yt' && (
+          <div id={`preview-player-${video.id}`} className="w-full h-full" />
+       )}
+       
+       {video?.type === 'generic' && (
+         <video 
+           ref={(el) => { if(el) playerRef.current = el; }}
+           src={video.val} 
+           autoPlay 
+           muted 
+           controls 
+           className="w-full h-full object-contain"
+           onLoadedMetadata={(e: any) => e.target.currentTime = status.time}
+         />
+       )}
+
+       {video?.type === 'fb' && (
+         <div className="w-full h-full bg-zinc-950 flex flex-col items-center justify-center text-center p-6 gap-4">
+           <Facebook className="w-12 h-12 text-zinc-900" />
+           <p className="text-[10px] font-black uppercase text-zinc-700 tracking-widest max-w-[200px]">
+             Facebook API restricts remote monitoring. Use Master Commands to sync.
+           </p>
+         </div>
+       )}
+
+       {video?.type === 'x' && (
+         <div className="w-full h-full bg-zinc-950 flex flex-col items-center justify-center text-center p-6 gap-4">
+           <Radio className="w-12 h-12 text-zinc-900" />
+           <p className="text-[10px] font-black uppercase text-zinc-700 tracking-widest max-w-[200px]">
+             X (Twitter) Feed is restricted to output display only.
+           </p>
+         </div>
+       )}
+
+       {/* Control Overlay */}
+       <div className="absolute inset-x-0 bottom-0 p-4 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all z-10">
+          <div className="bg-black/80 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4">
+             <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] font-black uppercase text-blue-500 tracking-[0.2em]">Sync Authority</span>
+                <span className="text-[10px] font-bold text-white">Remote Control Active</span>
+             </div>
+             <button 
+               onClick={() => {
+                 let currentTime = 0;
+                 if (video?.type === 'yt' && playerRef.current) {
+                   currentTime = playerRef.current.getCurrentTime();
+                 } else if (video?.type === 'generic' && playerRef.current) {
+                   currentTime = playerRef.current.currentTime;
+                 }
+                 if (currentTime > 0) onSeek(currentTime);
+               }}
+               className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center gap-2"
+             >
+               <RefreshCw className="w-3 h-3" />
+               Force Sync All
+             </button>
+          </div>
+       </div>
     </div>
   );
 }

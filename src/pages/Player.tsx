@@ -142,6 +142,15 @@ export default function Player() {
               // We'll use a signal to trigger a search in the next render or use a ref.
               // Actually, we can just find it in the current state if it's already there.
               setTargetVideoId(vId);
+            } else if (type === 'SEEK_TO') {
+              const time = data.syncTrigger.time;
+              if (currentVideo?.type === 'yt' && ytPlayerRef.current) {
+                ytPlayerRef.current.seekTo(time, true);
+              } else if (currentVideo?.type === 'fb' && fbPlayerRef.current) {
+                fbPlayerRef.current.seek(time);
+              } else if (currentVideo?.type === 'generic' && videoElementRef.current) {
+                videoElementRef.current.currentTime = time;
+              }
             }
           }
         }
@@ -434,6 +443,33 @@ export default function Player() {
       setTargetVideoId(null);
     }
   }, [targetVideoId, videos]);
+
+  useEffect(() => {
+    if (!channelId || !currentVideo) return;
+
+    // Report Playback Status for Master Control
+    const reportStatus = async () => {
+      let currentTime = 0;
+      if (currentVideo.type === 'yt' && ytPlayerRef.current) {
+        currentTime = ytPlayerRef.current.getCurrentTime();
+      } else if (currentVideo.type === 'fb' && fbPlayerRef.current) {
+        currentTime = fbPlayerRef.current.getCurrentPosition();
+      } else if (currentVideo.type === 'generic' && videoElementRef.current) {
+        currentTime = videoElementRef.current.currentTime;
+      }
+
+      await updateDoc(doc(db, "channels", channelId), {
+        playbackStatus: {
+          index: currentIndex,
+          time: currentTime,
+          updatedAt: serverTimestamp()
+        }
+      });
+    };
+
+    const interval = setInterval(reportStatus, 3000);
+    return () => clearInterval(interval);
+  }, [channelId, currentIndex, currentVideo]);
 
   if (videos.length === 0) {
     return (
