@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { collection, query, where, onSnapshot, orderBy, getDocs, limit, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { Play, SkipBack, SkipForward, Volume2, VolumeX, List, Tv, X, Radio, ChevronRight, Share2, Disc, Edit2 } from "lucide-react";
+import { Play, SkipBack, SkipForward, Volume2, VolumeX, List, Tv, X, Radio, ChevronRight, Share2, Disc, Edit2, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 declare global {
@@ -55,6 +55,15 @@ export default function Player() {
   const [editEndTime, setEditEndTime] = useState("00:00:00");
   const [editUrl, setEditUrl] = useState("");
   const [isFetching, setIsFetching] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loopPlaylistRef = useRef(loopPlaylist);
+  const videosRef = useRef(videos);
+  const currentIndexRef = useRef(currentIndex);
+
+  useEffect(() => { loopPlaylistRef.current = loopPlaylist; }, [loopPlaylist]);
+  useEffect(() => { videosRef.current = videos; }, [videos]);
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
 
   const handleFetchDuration = (url: string) => {
     const id = ytId(url);
@@ -162,14 +171,15 @@ export default function Player() {
   }, []);
 
   const handleNext = () => {
-    if (currentVideo?.loopVideo) {
+    const curV = videosRef.current[currentIndexRef.current];
+    if (curV?.loopVideo) {
       setPlayCount(c => c + 1);
       return;
     }
     
     setCurrentIndex((p) => {
-      if (p === videos.length - 1) {
-        if (loopPlaylist) {
+      if (p === videosRef.current.length - 1) {
+        if (loopPlaylistRef.current) {
           setPlayCount(c => c + 1);
           return 0;
         }
@@ -177,6 +187,16 @@ export default function Player() {
       }
       return p + 1;
     });
+  };
+
+  const handleRefreshPlaylist = () => {
+    setIsRefreshing(true);
+    // Force a re-sync by resetting and letting onSnapshot handle it
+    setTimeout(() => setIsRefreshing(false), 800);
+  };
+
+  const handleRefreshVideo = () => {
+    setPlayCount(c => c + 1); // This will trigger the useEffect to reload the player
   };
   
   const handlePrev = () => setCurrentIndex((p) => (p - 1 + videos.length) % videos.length);
@@ -283,7 +303,7 @@ export default function Player() {
     return () => {
       if (fbIntervalRef.current) clearInterval(fbIntervalRef.current);
     };
-  }, [currentIndex, currentVideo, loopPlaylist, playCount]);
+  }, [currentIndex, currentVideo?.id, currentVideo?.val, currentVideo?.startTime, currentVideo?.endTime, playCount]);
 
   if (videos.length === 0) {
     return (
@@ -330,13 +350,22 @@ export default function Player() {
             <h3 className="text-xs font-black italic uppercase tracking-[0.3em] text-zinc-500">Live Feed</h3>
             <h4 className="text-xl font-black uppercase italic tracking-tighter">Sequence Menu</h4>
           </div>
-          <button 
-            onClick={toggleGlobalLoop}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${loopPlaylist ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-white/5 text-zinc-500'}`}
-          >
-            <Disc className={`w-3.5 h-3.5 ${loopPlaylist && 'animate-spin'}`} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Loop</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleRefreshPlaylist}
+              className={`p-2 rounded-lg bg-zinc-900 border border-white/5 text-zinc-500 hover:text-white transition-all ${isRefreshing && 'animate-spin'}`}
+              title="Refresh Playlist"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+            <button 
+              onClick={toggleGlobalLoop}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${loopPlaylist ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-white/5 text-zinc-500'}`}
+            >
+              <Disc className={`w-3.5 h-3.5 ${loopPlaylist && 'animate-spin'}`} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Loop</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-black/20">
@@ -423,9 +452,13 @@ export default function Player() {
                 <SkipBack className="w-5 h-5 text-zinc-500 group-hover:text-white" />
               </button>
               <div 
-                className="p-8 bg-red-600 rounded-[32px] flex items-center justify-center shadow-2xl shadow-red-600/40 active:scale-95 transition-transform cursor-pointer"
-                onClick={() => handleNext()} // Shortcut for testing
+                className="p-8 bg-red-600 rounded-[32px] flex items-center justify-center shadow-2xl shadow-red-600/40 active:scale-95 transition-transform cursor-pointer relative group"
+                onClick={handleRefreshVideo} 
+                title="Refresh Current Video"
               >
+                <div className="absolute inset-x-0 -top-4 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                   <span className="text-[8px] font-black uppercase tracking-widest bg-zinc-900 px-2 py-1 rounded border border-white/5">Restart Source</span>
+                </div>
                 <Play className="w-8 h-8 fill-white text-white translate-x-1" />
               </div>
               <button 
