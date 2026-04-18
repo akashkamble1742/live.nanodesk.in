@@ -82,6 +82,40 @@ export default function ChannelDetail() {
     };
   }, [channelId]);
 
+  // 2. Load YouTube API
+  useEffect(() => {
+    if (window.YT) return;
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+    
+    window.onYouTubeIframeAPIReady = () => console.log("YT READY");
+  }, []);
+
+  // 3. Load Facebook SDK
+  useEffect(() => {
+    const fbRoot = document.getElementById('fb-root');
+    if (!fbRoot) {
+      const div = document.createElement('div');
+      div.id = 'fb-root';
+      document.body.appendChild(div);
+    }
+
+    if (document.getElementById('facebook-jssdk')) return;
+    const script = document.createElement('script');
+    script.id = 'facebook-jssdk';
+    script.src = "https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0";
+    script.async = true;
+    script.defer = true;
+    script.crossOrigin = "anonymous";
+    document.body.appendChild(script);
+
+    window.fbAsyncInit = function() {
+      window.FB.init({ xfbml: true, version: 'v18.0' });
+    };
+  }, []);
+
   const ytId = (url: string) => {
     const m = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
     return m ? m[1] : null;
@@ -137,6 +171,8 @@ export default function ChannelDetail() {
   const handleFetchDuration = (url: string, isEdit = false) => {
     const id = ytId(url);
     if (id) {
+      if (!window.YT || !window.YT.Player) return;
+      
       setIsFetching(true);
       let fetcher = document.getElementById('temp-duration-fetcher');
       if (!fetcher) {
@@ -188,10 +224,22 @@ export default function ChannelDetail() {
   };
 
   useEffect(() => {
-    if (newVideoUrl) {
-      handleFetchDuration(newVideoUrl, false);
-    }
+    const timer = setTimeout(() => {
+      if (newVideoUrl && newVideoUrl.includes('youtu')) {
+        handleFetchDuration(newVideoUrl, false);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
   }, [newVideoUrl]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (editUrl && editUrl.includes('youtu')) {
+        handleFetchDuration(editUrl, true);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [editUrl]);
 
   const handleUpdateVideo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -690,11 +738,7 @@ export default function ChannelDetail() {
                       type="text"
                       required
                       value={editUrl}
-                      onChange={(e) => {
-                        const url = e.target.value;
-                        setEditUrl(url);
-                        if (url.includes('youtu')) handleFetchDuration(url, true);
-                      }}
+                      onChange={(e) => setEditUrl(e.target.value)}
                       className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
                     />
                   </div>
