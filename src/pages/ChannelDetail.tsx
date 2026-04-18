@@ -25,20 +25,36 @@ interface Channel {
   loopPlaylist?: boolean;
 }
 
+// Time Helpers
+const toSeconds = (hms: string) => {
+  const [h, m, s] = hms.split(':').map(Number);
+  return (h * 3600) + (m * 60) + s;
+};
+
+const fromSeconds = (seconds: number) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return [h, m, s].map(v => v.toString().padStart(2, '0')).join(':');
+};
+
 export default function ChannelDetail() {
   const { channelId } = useParams();
   const [channel, setChannel] = useState<Channel | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [newVideoTitle, setNewVideoTitle] = useState("");
-  const [newStartTime, setNewStartTime] = useState("");
-  const [newEndTime, setNewEndTime] = useState("");
+  const [newStartTime, setNewStartTime] = useState("00:00:00");
+  const [newEndTime, setNewEndTime] = useState("00:00:00");
+  const [totalDuration, setTotalDuration] = useState(0);
+  const [isFetching, setIsFetching] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editUrl, setEditUrl] = useState("");
-  const [editStartTime, setEditStartTime] = useState("");
-  const [editEndTime, setEditEndTime] = useState("");
+  const [editStartTime, setEditStartTime] = useState("00:00:00");
+  const [editEndTime, setEditEndTime] = useState("00:00:00");
+  const [editTotalDuration, setEditTotalDuration] = useState(0);
 
   useEffect(() => {
     if (!channelId) return;
@@ -87,20 +103,63 @@ export default function ChannelDetail() {
         val,
         order: videos.length,
         active: true,
-        startTime: Number(newStartTime) || 0,
-        endTime: Number(newEndTime) || 0,
+        startTime: toSeconds(newStartTime),
+        endTime: toSeconds(newEndTime),
         loopVideo: false,
         updatedAt: serverTimestamp()
       });
       setNewVideoUrl("");
       setNewVideoTitle("");
-      setNewStartTime("");
-      setNewEndTime("");
+      setNewStartTime("00:00:00");
+      setNewEndTime("00:00:00");
+      setTotalDuration(0);
       setIsAdding(false);
     } catch (err) {
       console.error("Add video error:", err);
     }
   };
+
+  const handleFetchDuration = () => {
+    const id = ytId(newVideoUrl);
+    if (!id) return;
+    
+    setIsFetching(true);
+    // Create a hidden div for YT player if it doesn't exist
+    let fetcher = document.getElementById('temp-duration-fetcher');
+    if (!fetcher) {
+      fetcher = document.createElement('div');
+      fetcher.id = 'temp-duration-fetcher';
+      fetcher.style.display = 'none';
+      document.body.appendChild(fetcher);
+    }
+
+    const player = new window.YT.Player('temp-duration-fetcher', {
+      height: '0',
+      width: '0',
+      videoId: id,
+      events: {
+        onReady: (event: any) => {
+          const duration = Math.floor(event.target.getDuration());
+          setTotalDuration(duration);
+          setNewEndTime(fromSeconds(duration));
+          setIsFetching(false);
+          event.target.destroy();
+        },
+        onError: () => {
+          setIsFetching(false);
+        }
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (newVideoUrl.includes('youtu')) {
+      const id = ytId(newVideoUrl);
+      if (id && window.YT) {
+        handleFetchDuration();
+      }
+    }
+  }, [newVideoUrl]);
 
   const handleUpdateVideo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,8 +186,8 @@ export default function ChannelDetail() {
         url: editUrl,
         type,
         val,
-        startTime: Number(editStartTime) || 0,
-        endTime: Number(editEndTime) || 0,
+        startTime: toSeconds(editStartTime),
+        endTime: toSeconds(editEndTime),
         updatedAt: serverTimestamp()
       });
       setEditingVideo(null);
@@ -141,8 +200,8 @@ export default function ChannelDetail() {
     setEditingVideo(v);
     setEditTitle(v.title);
     setEditUrl(v.url);
-    setEditStartTime(v.startTime?.toString() || "0");
-    setEditEndTime(v.endTime?.toString() || "0");
+    setEditStartTime(fromSeconds(v.startTime || 0));
+    setEditEndTime(fromSeconds(v.endTime || 0));
   };
 
   const toggleLoop = async () => {
@@ -265,7 +324,8 @@ export default function ChannelDetail() {
                           <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest truncate max-w-[150px]">{video.url}</span>
                           {(video.startTime || video.endTime) ? (
                             <span className="text-[10px] text-red-500 font-black uppercase tracking-widest bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
-                              {video.startTime || 0}s ➔ {video.endTime || 'END'}s
+                              {fromSeconds(video.startTime || 0)} ➔ {fromSeconds(video.endTime || 0)} 
+                              <span className="ml-2 opacity-50">({fromSeconds((video.endTime || 0) - (video.startTime || 0))} Play)</span>
                             </span>
                           ) : null}
                           {video.loopVideo && (
@@ -388,28 +448,39 @@ export default function ChannelDetail() {
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Start At (Seconds)</label>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] block">Start At (H:M:S)</label>
+                      </div>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
                         value={newStartTime}
                         onChange={(e) => setNewStartTime(e.target.value)}
-                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
-                        placeholder="0"
+                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-mono font-bold"
+                        placeholder="00:00:00"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">End At (Seconds)</label>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] block">End At (H:M:S)</label>
+                        {isFetching && <span className="text-[8px] text-red-500 animate-pulse font-black uppercase">Fetching...</span>}
+                      </div>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
                         value={newEndTime}
                         onChange={(e) => setNewEndTime(e.target.value)}
-                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
-                        placeholder="Leave 0 for full"
+                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-mono font-bold"
+                        placeholder="00:00:00"
                       />
                     </div>
                   </div>
+                  {(toSeconds(newEndTime) > 0) && (
+                    <div className="bg-red-600/5 border border-red-600/20 p-4 rounded-2xl flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Total Playback:</span>
+                      <span className="text-xl font-black italic text-red-500 uppercase tracking-tighter">
+                        {fromSeconds(Math.max(0, toSeconds(newEndTime) - toSeconds(newStartTime)))}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-4 pt-4">
@@ -466,26 +537,32 @@ export default function ChannelDetail() {
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Start At (Seconds)</label>
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Start At (H:M:S)</label>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
                         value={editStartTime}
                         onChange={(e) => setEditStartTime(e.target.value)}
-                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
+                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-mono font-bold"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">End At (Seconds)</label>
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">End At (H:M:S)</label>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
                         value={editEndTime}
                         onChange={(e) => setEditEndTime(e.target.value)}
-                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold"
+                        className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-mono font-bold"
                       />
                     </div>
                   </div>
+                  {(toSeconds(editEndTime) > 0) && (
+                    <div className="bg-red-600/5 border border-red-600/20 p-4 rounded-2xl flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Duration Adjustment:</span>
+                      <span className="text-xl font-black italic text-red-500 uppercase tracking-tighter">
+                        {fromSeconds(Math.max(0, toSeconds(editEndTime) - toSeconds(editStartTime)))}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-4 pt-4">
