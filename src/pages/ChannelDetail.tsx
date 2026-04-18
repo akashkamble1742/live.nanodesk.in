@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { Plus, Trash2, ArrowLeft, Youtube, Facebook, Save, Play, GripVertical, Power, ExternalLink, Radio, Disc } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Youtube, Facebook, Save, Play, GripVertical, Power, ExternalLink, Radio, Disc, Edit2 } from "lucide-react";
 import { motion, Reorder, AnimatePresence } from "motion/react";
 
 interface Video {
@@ -28,6 +28,9 @@ export default function ChannelDetail() {
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [newVideoTitle, setNewVideoTitle] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editUrl, setEditUrl] = useState("");
 
   useEffect(() => {
     if (!channelId) return;
@@ -84,6 +87,45 @@ export default function ChannelDetail() {
     } catch (err) {
       console.error("Add video error:", err);
     }
+  };
+
+  const handleUpdateVideo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!channelId || !editingVideo || !editUrl) return;
+
+    let type: 'yt' | 'fb' = 'yt';
+    let val = '';
+
+    if (editUrl.includes('youtu')) {
+      const id = ytId(editUrl);
+      if (!id) return alert("Invalid YouTube URL");
+      type = 'yt';
+      val = id;
+    } else if (editUrl.includes('facebook')) {
+      type = 'fb';
+      val = editUrl;
+    } else {
+      return alert("Only YouTube and Facebook links supported");
+    }
+
+    try {
+      await updateDoc(doc(db, "channels", channelId, "videos", editingVideo.id), {
+        title: editTitle,
+        url: editUrl,
+        type,
+        val,
+        updatedAt: serverTimestamp()
+      });
+      setEditingVideo(null);
+    } catch (err) {
+      console.error("Update video error:", err);
+    }
+  };
+
+  const openEditModal = (v: Video) => {
+    setEditingVideo(v);
+    setEditTitle(v.title);
+    setEditUrl(v.url);
   };
 
   const toggleActive = async (v: Video) => {
@@ -193,6 +235,13 @@ export default function ChannelDetail() {
 
                     <div className="flex items-center gap-3">
                       <button 
+                        onClick={() => openEditModal(video)}
+                        className="p-2.5 text-zinc-700 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+                        title="Edit Source"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
                         onClick={() => toggleActive(video)}
                         className={`p-2.5 rounded-xl border transition-all ${video.active ? 'bg-zinc-800 text-green-500 border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'bg-zinc-950 text-zinc-600 border-white/5'}`}
                         title={video.active ? "Mute Video" : "Activate Video"}
@@ -288,6 +337,59 @@ export default function ChannelDetail() {
                     className="flex-1 px-6 py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-red-600/20"
                   >
                     Integrate
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {editingVideo && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+            <motion.div 
+              initial={{ scale: 0.9, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 20, opacity: 0 }}
+              className="bg-zinc-900 border border-white/5 p-10 rounded-[32px] max-w-xl w-full shadow-2xl"
+            >
+              <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8 tracking-tight">Modify Source</h2>
+              <form onSubmit={handleUpdateVideo} className="space-y-8">
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Content Label</label>
+                    <input
+                      type="text"
+                      required
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Media URL</label>
+                    <input
+                      type="text"
+                      required
+                      value={editUrl}
+                      onChange={(e) => setEditUrl(e.target.value)}
+                      className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    type="button"
+                    onClick={() => setEditingVideo(null)}
+                    className="flex-1 px-6 py-5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl font-black uppercase text-xs tracking-widest transition-all"
+                  >
+                    Discard
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-1 px-6 py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-red-600/20"
+                  >
+                    Commit Changes
                   </button>
                 </div>
               </form>
