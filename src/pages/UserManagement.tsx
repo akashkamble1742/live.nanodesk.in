@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, query, where } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../hooks/useAuth";
-import { UserPlus, Shield, Trash2, Mail, BadgeCheck, AlertCircle } from "lucide-react";
+import { Trash2, Mail, BadgeCheck, AlertCircle, ShieldCheck, ArrowLeft, Disc, User as UserIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { Link } from "react-router-dom";
 
 interface AppUser {
   id: string;
@@ -15,9 +16,6 @@ interface AppUser {
 export default function UserManagement() {
   const { appUser } = useAuth();
   const [users, setUsers] = useState<AppUser[]>([]);
-  const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserRole, setNewUserRole] = useState<'admin' | 'editor'>('editor');
-  const [isAdding, setIsAdding] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "app_users"), (snap) => {
@@ -25,21 +23,6 @@ export default function UserManagement() {
     });
     return unsub;
   }, []);
-
-  const handleAddUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newUserEmail) return;
-
-    // In a real app, you might want a more sophisticated invite system.
-    // Here we just pre-allocate a role in the DB mapped by email (not UID yet, 
-    // unless you want them to log in first. But standard practice is mapping UID upon first login).
-    // Actually, our rules wait for the specific userId (UID). 
-    // Let's assume the admin knows the user's UID or we check by email on first login.
-    // For this simple demo, I'll allow adding by manually entering a UID if known, 
-    // or we can use email as a lookup in a separate "invites" collection.
-    // To keep it simple and safe for the AI Studio context where we don't have server actions for email lookup:
-    alert("In this demo, user IDs are used for direct assignment. Please ensure the user has logged in once to get their ID, or use a lookup.");
-  };
 
   const updateUserRole = async (id: string, newRole: 'admin' | 'editor') => {
     if (id === appUser?.uid) return alert("You cannot change your own role.");
@@ -53,76 +36,103 @@ export default function UserManagement() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-       <div className="flex items-center justify-between mb-12">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter">Access Control</h1>
-          <p className="text-zinc-500 font-medium">Manage who can edit your broadcast channels</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex flex-col gap-8 mb-16">
+        <Link 
+          to="/admin" 
+          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 hover:text-white transition-colors w-fit"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+        </Link>
+        
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-0.5 bg-red-600" />
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3 h-3 text-red-500" />
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-red-500">Security Clearance</span>
+            </div>
+          </div>
+          <h1 className="text-6xl font-black italic uppercase tracking-tighter leading-none">
+            Access <span className="text-zinc-600 italic">Control</span>
+          </h1>
+          <p className="max-w-xl text-zinc-500 font-medium">Authorize team members to manage your broadcast feeds. Permissions are granted per-email address.</p>
         </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl">
-        <div className="p-6 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
-            <h2 className="font-bold flex items-center gap-2">
-                <Shield className="w-5 h-5 text-red-500" /> Authorized Personnel
-            </h2>
-            <span className="text-xs font-mono text-zinc-500 bg-black px-2 py-1 rounded">{users.length} Total Users</span>
+      <div className="bg-zinc-900/40 border border-white/5 rounded-[40px] overflow-hidden shadow-2xl backdrop-blur-sm">
+        <div className="p-8 lg:p-10 border-b border-white/5 flex items-start gap-4 bg-white/5">
+          <div className="bg-zinc-800 p-3 rounded-[16px]">
+            <AlertCircle className="w-5 h-5 text-zinc-400" />
+          </div>
+          <div className="space-y-1">
+             <h4 className="text-sm font-black uppercase tracking-widest text-white">Manual Authorization</h4>
+             <p className="text-xs text-zinc-500 leading-relaxed font-medium">To add a new user, add their email to the `app_users` collection in Firestore manually.</p>
+          </div>
         </div>
 
-        <div className="divide-y divide-zinc-800">
-          {users.map((u) => (
-            <div key={u.id} className="p-6 flex items-center justify-between group hover:bg-zinc-800/30 transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center border border-zinc-700">
-                   <Mail className="w-5 h-5 text-zinc-500" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold">{u.displayName || "Authorized User"}</h3>
-                    {u.role === 'admin' && <BadgeCheck className="w-4 h-4 text-red-500" />}
+        <div className="divide-y divide-white/5">
+          <AnimatePresence mode="popLayout">
+            {users.length === 0 ? (
+               <div className="p-20 text-center space-y-4">
+                 <UserIcon className="w-12 h-12 text-zinc-800 mx-auto" />
+                 <p className="text-zinc-600 font-black uppercase italic tracking-widest text-xs">Only bootstrap admin has access</p>
+               </div>
+            ) : (
+              users.map((user) => (
+                <motion.div 
+                  layout
+                  key={user.id} 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="flex items-center gap-6">
+                    <div className="relative">
+                       <div className="absolute inset-0 bg-red-600 blur-lg opacity-20" />
+                       <div className="relative w-16 h-16 bg-zinc-800 rounded-[20px] flex items-center justify-center border border-white/5">
+                          <Mail className="w-7 h-7 text-zinc-400" />
+                       </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xl font-black italic uppercase tracking-tighter">{user.displayName || "Authorized User"}</h4>
+                        {user.role === 'admin' && <BadgeCheck className="w-5 h-5 text-red-500" />}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                        <Disc className={`w-3 h-3 ${user.role === 'admin' ? 'text-red-500' : 'text-zinc-600'}`} /> {user.email}
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-zinc-500 font-mono italic">{u.email}</p>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-4">
-                <select 
-                  value={u.role}
-                  onChange={(e) => updateUserRole(u.id, e.target.value as 'admin' | 'editor')}
-                  disabled={u.id === appUser?.uid}
-                  className="bg-black border border-zinc-800 rounded-lg px-3 py-1.5 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-red-600 disabled:opacity-50"
-                >
-                  <option value="admin">Admin</option>
-                  <option value="editor">Editor</option>
-                </select>
+                  <div className="flex items-center gap-4">
+                    <div className="bg-black/40 border border-white/5 p-1.5 rounded-2xl flex items-center gap-1">
+                       {(['admin', 'editor'] as const).map((role) => (
+                         <button
+                           key={role}
+                           onClick={() => updateUserRole(user.id, role)}
+                           disabled={user.id === appUser?.uid}
+                           className={`px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.role === role ? 'bg-red-600 text-white shadow-xl shadow-red-600/20' : 'text-zinc-500 hover:text-zinc-300 disabled:opacity-30'}`}
+                         >
+                           {role}
+                         </button>
+                       ))}
+                    </div>
 
-                <button 
-                  onClick={() => removeUser(u.id)}
-                  disabled={u.id === appUser?.uid}
-                  className="p-2 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-0"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {users.length === 0 && (
-            <div className="p-12 text-center text-zinc-500 italic">
-               Only the owner (bootstrap admin) currently has access.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-8 p-6 bg-red-600/5 border border-red-600/20 rounded-2xl flex gap-4">
-        <AlertCircle className="w-6 h-6 text-red-500 shrink-0" />
-        <div className="space-y-2">
-          <h4 className="font-bold text-red-500">Security Note</h4>
-          <p className="text-sm text-zinc-400">
-            Admins have full control over all channels and users. Editors can only manage videos in the channels they create or are assigned to. 
-            Currently, adding users requires them to first log in; then their role can be upgraded here.
-          </p>
+                    <button 
+                      onClick={() => removeUser(user.id)}
+                      disabled={user.id === appUser?.uid}
+                      className="p-4 bg-zinc-900 border border-white/5 text-zinc-700 hover:text-red-500 rounded-2xl transition-all active:scale-95 disabled:opacity-0"
+                      title="Revoke Access"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { Plus, Trash2, ArrowLeft, Youtube, Facebook, Save, Play, GripVertical, Power, ExternalLink } from "lucide-react";
-import { motion, Reorder } from "framer-motion";
+import { Plus, Trash2, ArrowLeft, Youtube, Facebook, Save, Play, GripVertical, Power, ExternalLink, Radio, Disc } from "lucide-react";
+import { motion, Reorder, AnimatePresence } from "motion/react";
 
 interface Video {
   id: string;
@@ -101,7 +101,6 @@ export default function ChannelDetail() {
   const handleReorder = async (newOrder: Video[]) => {
     setVideos(newOrder);
     if (!channelId) return;
-    // Batch updates would be better but for simplicity:
     newOrder.forEach((v, index) => {
       if (v.order !== index) {
         updateDoc(doc(db, "channels", channelId, "videos", v.id), { order: index });
@@ -113,167 +112,189 @@ export default function ChannelDetail() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link to="/admin" className="p-2 bg-zinc-900 border border-zinc-800 rounded-lg hover:border-zinc-700 transition-all">
-            <ArrowLeft className="w-5 h-5 text-zinc-400" />
-          </Link>
-          <div>
-            <h1 className="text-3xl font-black italic uppercase tracking-tighter">{channel.name}</h1>
-            <p className="text-sm text-zinc-500 font-mono">Channel Registry: {channel.id}</p>
+      <div className="flex flex-col gap-8 mb-16">
+        <Link 
+          to="/admin" 
+          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 hover:text-white transition-colors w-fit"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Stations
+        </Link>
+        
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-0.5 bg-red-600" />
+              <div className="flex items-center gap-1.5">
+                <Radio className="w-3 h-3 text-red-500 animate-pulse" />
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-red-500">Managing Broadcast</span>
+              </div>
+            </div>
+            <h1 className="text-6xl font-black italic uppercase tracking-tighter leading-none">
+              {channel.name}
+            </h1>
+            <div className="flex items-center gap-4 text-xs font-bold text-zinc-500">
+               <span className="bg-zinc-900 border border-white/5 py-1 px-3 rounded-full uppercase tracking-widest leading-none">/play/{channel.slug}</span>
+               <a 
+                 href={`/play/${channel.slug}`} 
+                 target="_blank" 
+                 className="flex items-center gap-2 hover:text-white transition-colors"
+               >
+                 <ExternalLink className="w-3.5 h-3.5" /> Open Public Feed
+               </a>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <Link 
-            to={`/play/${channel.slug}`} 
-            target="_blank"
-            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 font-bold py-2.5 px-5 rounded-xl transition-all border border-zinc-700"
-          >
-            <Play className="w-4 h-4 text-red-500 fill-red-500" /> Preview Player
-          </Link>
           <button
             onClick={() => setIsAdding(true)}
-            className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-5 rounded-xl transition-all shadow-lg shadow-red-600/20"
+            className="flex items-center gap-3 bg-white text-black font-black py-4 px-8 rounded-2xl transition-all shadow-2xl hover:scale-105 active:scale-95 group"
           >
-            <Plus className="w-5 h-5" /> Add Video
+            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" /> Add Media Content
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Playlist Management */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-500">Playlist Order</h2>
-            <span className="text-xs text-zinc-600 bg-zinc-900 px-2 py-1 rounded">Drag to reorder</span>
-          </div>
-
-          <Reorder.Group axis="y" values={videos} onReorder={handleReorder} className="space-y-3">
-            {videos.map((video) => (
-              <Reorder.Item 
-                key={video.id} 
-                value={video}
-                className={`flex items-center gap-4 bg-zinc-900/50 border ${video.active ? 'border-zinc-800' : 'border-zinc-800/50 opacity-50'} p-4 rounded-xl group hover:border-zinc-700 transition-all cursor-grab active:cursor-grabbing`}
-              >
-                <div className="text-zinc-600">
-                  <GripVertical className="w-5 h-5" />
-                </div>
-                
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${video.type === 'yt' ? 'bg-red-600/10' : 'bg-blue-600/10'}`}>
-                  {video.type === 'yt' ? <Youtube className="w-6 h-6 text-red-600" /> : <Facebook className="w-6 h-6 text-blue-600" />}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold truncate text-zinc-200">{video.title}</h3>
-                  <p className="text-xs text-zinc-500 truncate">{video.url}</p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => toggleActive(video)}
-                    className={`p-2 rounded-lg transition-colors ${video.active ? 'text-green-500 hover:bg-green-500/10' : 'text-zinc-600 hover:bg-zinc-800'}`}
-                  >
-                    <Power className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={() => deleteVideo(video.id)}
-                    className="p-2 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </Reorder.Item>
-            ))}
-          </Reorder.Group>
-
-          {videos.length === 0 && (
-            <div className="bg-zinc-900/30 border-2 border-dashed border-zinc-800 rounded-2xl py-20 text-center">
-              <p className="text-zinc-500 font-medium">No videos in this channel yet.</p>
-              <button 
-                onClick={() => setIsAdding(true)}
-                className="mt-4 text-red-500 font-bold hover:underline"
-              >
-                Add your first link
-              </button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        <div className="lg:col-span-2">
+          <div className="bg-zinc-900/40 border border-white/5 rounded-[40px] p-8 lg:p-12 shadow-2xl backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-10">
+               <h3 className="text-2xl font-black italic uppercase tracking-tighter">Live Sequence</h3>
+               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                 <GripVertical className="w-4 h-4" /> Drag to Reorder
+               </div>
             </div>
-          )}
+
+            <Reorder.Group axis="y" values={videos} onReorder={handleReorder} className="space-y-4">
+              {videos.length === 0 ? (
+                <div className="text-center py-20 border-2 border-dashed border-white/5 rounded-[32px]">
+                  <div className="bg-zinc-800/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <Play className="w-6 h-6 text-zinc-600" />
+                  </div>
+                  <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs italic">Playlist is currently empty</p>
+                </div>
+              ) : (
+                videos.map((video) => (
+                  <Reorder.Item 
+                    key={video.id} 
+                    value={video}
+                    className={`group relative bg-black/40 border border-white/5 rounded-2xl p-4 flex items-center justify-between hover:bg-zinc-800/40 transition-all cursor-grab active:cursor-grabbing ${!video.active && 'opacity-40'}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="text-zinc-700 p-2 group-hover:text-zinc-500 transition-colors">
+                        <GripVertical className="w-5 h-5" />
+                      </div>
+                      <div className={`p-2 rounded-lg ${video.type === 'yt' ? 'bg-red-600/10 text-red-600' : 'bg-blue-600/10 text-blue-600'}`}>
+                        {video.type === 'yt' ? <Youtube className="w-5 h-5" /> : <Facebook className="w-5 h-5" />}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-black uppercase tracking-tighter text-zinc-200">{video.title}</span>
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest truncate max-w-[200px] sm:max-w-md">{video.url}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => toggleActive(video)}
+                        className={`p-2.5 rounded-xl border transition-all ${video.active ? 'bg-zinc-800 text-green-500 border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'bg-zinc-950 text-zinc-600 border-white/5'}`}
+                        title={video.active ? "Mute Video" : "Activate Video"}
+                      >
+                        <Power className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => deleteVideo(video.id)}
+                        className="p-2.5 text-zinc-700 hover:text-red-600 hover:bg-red-600/10 rounded-xl transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </Reorder.Item>
+                ))
+              )}
+            </Reorder.Group>
+          </div>
         </div>
 
-        {/* Sidebar Settings */}
-        <div className="space-y-6">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-            <h3 className="font-bold text-lg mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <Link 
-                to={`/play/${channel.slug}`}
-                target="_blank"
-                className="flex items-center justify-between w-full p-4 bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-all font-bold group"
-              >
-                <div className="flex items-center gap-3">
-                  <ExternalLink className="w-5 h-5 text-red-500" />
-                  <span>Public Link</span>
-                </div>
-                <div className="text-[10px] text-zinc-500 font-mono">/play/{channel.slug}</div>
-              </Link>
-            </div>
-          </div>
+        <div className="space-y-8">
+           <div className="bg-zinc-900 border border-white/5 rounded-[32px] p-8 shadow-2xl">
+              <h3 className="text-xl font-black italic uppercase tracking-tighter mb-6">Quick Settings</h3>
+              <div className="space-y-4">
+                 <Link 
+                   to={`/play/${channel.slug}`}
+                   target="_blank"
+                   className="flex items-center justify-between w-full p-6 bg-white/[0.03] border border-white/5 rounded-[24px] hover:bg-white/[0.06] transition-all group"
+                 >
+                    <div className="flex items-center gap-3">
+                       <Radio className="w-5 h-5 text-red-500 animate-pulse" />
+                       <span className="font-black text-sm uppercase italic tracking-tighter">Live Player</span>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-zinc-600 group-hover:text-white transition-colors" />
+                 </Link>
+                 
+                 <div className="p-6 bg-zinc-950 border border-white/5 rounded-[24px]">
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Station ID</span>
+                    <span className="text-xs font-mono text-zinc-300 break-all">{channel.id}</span>
+                 </div>
+              </div>
+           </div>
         </div>
       </div>
 
-      {/* Add Video Modal */}
-      {isAdding && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-zinc-900 border border-zinc-800 p-8 rounded-2xl max-w-lg w-full shadow-2xl"
-          >
-            <h2 className="text-2xl font-bold mb-6">Add New Broadcast Link</h2>
-            <form onSubmit={handleAddVideo} className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Video Title</label>
-                  <input
-                    type="text"
-                    value={newVideoTitle}
-                    onChange={(e) => setNewVideoTitle(e.target.value)}
-                    placeholder="Provide a name for this broadcast"
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all"
-                  />
+      <AnimatePresence>
+        {isAdding && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+            <motion.div 
+              initial={{ scale: 0.9, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 20, opacity: 0 }}
+              className="bg-zinc-900 border border-white/5 p-10 rounded-[32px] max-w-xl w-full shadow-2xl"
+            >
+              <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8 tracking-tight">Source Integration</h2>
+              <form onSubmit={handleAddVideo} className="space-y-8">
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Content Label</label>
+                    <input
+                      type="text"
+                      required
+                      value={newVideoTitle}
+                      onChange={(e) => setNewVideoTitle(e.target.value)}
+                      className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
+                      placeholder="e.g. BREAKING NEWS FEED"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-2 block">Media URL (YouTube/Facebook)</label>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      value={newVideoUrl}
+                      onChange={(e) => setNewVideoUrl(e.target.value)}
+                      className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all font-bold placeholder:text-zinc-800"
+                      placeholder="Paste link here..."
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Link (YouTube/Facebook URL)</label>
-                  <input
-                    autoFocus
-                    type="text"
-                    value={newVideoUrl}
-                    onChange={(e) => setNewVideoUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all"
-                  />
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    type="button"
+                    onClick={() => setIsAdding(false)}
+                    className="flex-1 px-6 py-5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl font-black uppercase text-xs tracking-widest transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-1 px-6 py-5 bg-red-600 hover:bg-red-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-red-600/20"
+                  >
+                    Integrate
+                  </button>
                 </div>
-              </div>
-              
-              <div className="flex gap-4 pt-4">
-                <button 
-                  type="button"
-                  onClick={() => setIsAdding(false)}
-                  className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl font-bold transition-all"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold transition-all"
-                >
-                  Save to Playlist
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

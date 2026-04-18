@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { collection, query, where, onSnapshot, orderBy, getDocs, limit } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { Play, SkipBack, SkipForward, Volume2, VolumeX, List, Tv } from "lucide-react";
+import { Play, SkipBack, SkipForward, Volume2, VolumeX, List, Tv, X, Radio, ChevronRight, Share2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 declare global {
@@ -28,9 +28,9 @@ export default function Player() {
   const { channelSlug } = useParams();
   const [videos, setVideos] = useState<Video[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
   const [channelName, setChannelName] = useState("Loading...");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isHovering, setIsHovering] = useState(false);
   
   const ytPlayerRef = useRef<any>(null);
   const fbPlayerRef = useRef<any>(null);
@@ -39,14 +39,12 @@ export default function Player() {
   useEffect(() => {
     if (!channelSlug) return;
 
-    // First find the channel by slug
     const channelsQuery = query(collection(db, "channels"), where("slug", "==", channelSlug), limit(1));
     const unsubChannel = onSnapshot(channelsQuery, (snapshot) => {
       if (!snapshot.empty) {
         const channelDoc = snapshot.docs[0];
         setChannelName(channelDoc.data().name);
 
-        // Then listen to its videos
         const videosQuery = query(
           collection(db, "channels", channelDoc.id, "videos"), 
           where("active", "==", true),
@@ -70,9 +68,7 @@ export default function Player() {
     const firstScriptTag = document.getElementsByTagName('script')[0];
     firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
     
-    window.onYouTubeIframeAPIReady = () => {
-      console.log("YT API Ready");
-    };
+    window.onYouTubeIframeAPIReady = () => console.log("YT READY");
   }, []);
 
   // 3. Load Facebook SDK
@@ -104,13 +100,8 @@ export default function Player() {
     };
   }, []);
 
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % videos.length);
-  };
-
-  const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + videos.length) % videos.length);
-  };
+  const handleNext = () => setCurrentIndex((p) => (p + 1) % videos.length);
+  const handlePrev = () => setCurrentIndex((p) => (p - 1 + videos.length) % videos.length);
 
   const currentVideo = videos[currentIndex];
 
@@ -136,29 +127,43 @@ export default function Player() {
     }
 
     if (currentVideo.type === 'fb' && window.FB) {
-      // Re-parse when FB video changes
       setTimeout(() => window.FB.XFBML.parse(), 100);
     }
   }, [currentIndex, currentVideo]);
 
   if (videos.length === 0) {
     return (
-      <div className="h-screen bg-black flex flex-col items-center justify-center space-y-4">
-        <Tv className="w-16 h-16 text-zinc-800 animate-pulse" />
-        <p className="text-zinc-600 font-bold uppercase tracking-widest italic">{channelName}</p>
-        <p className="text-zinc-400 text-sm">No active broadcast found for this channel.</p>
+      <div className="h-screen bg-black flex flex-col items-center justify-center space-y-8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(220,38,38,0.1),transparent)] flex items-center justify-center">
+            <motion.div 
+               animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
+               transition={{ duration: 4, repeat: Infinity }}
+               className="w-[500px] h-[500px] bg-red-600 rounded-full blur-[100px]"
+            />
+        </div>
+        <div className="relative flex flex-col items-center gap-6">
+           <Tv className="w-20 h-20 text-zinc-900 animate-pulse" />
+           <div className="text-center space-y-2">
+             <h2 className="text-2xl font-black italic uppercase tracking-tighter text-zinc-500">{channelName}</h2>
+             <p className="text-zinc-700 text-xs font-black uppercase tracking-[0.3em] italic">Transmitting silence...</p>
+           </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-black overflow-hidden flex flex-col lg:flex-row">
-      {/* Main Player Area */}
-      <div className="flex-1 relative bg-black flex items-center justify-center">
+    <div className="h-screen bg-black overflow-hidden flex flex-col lg:flex-row font-sans text-white">
+      {/* Main Broadcast Center - Area: 1920x1080 if window is 2400x1080 */}
+      <div 
+        className="flex-1 h-full relative bg-black flex items-center justify-center group"
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
         {currentVideo?.type === 'yt' ? (
-          <div id="yt-player-target" className="w-full h-full" />
+          <div id="yt-player-target" className="absolute inset-0 w-full h-full" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center">
             <div 
               className="fb-video" 
               data-href={currentVideo?.val} 
@@ -166,115 +171,156 @@ export default function Player() {
               data-allowfullscreen="true"
               data-width="auto"
               data-show-captions="false"
+              style={{ width: '100%', height: '100%' }}
             />
           </div>
         )}
 
-        {/* Overlay Controls (Mobile) */}
-        {!sidebarOpen && (
-           <button 
-             onClick={() => setSidebarOpen(true)}
-             className="absolute top-4 right-4 z-20 p-3 bg-black/50 hover:bg-red-600 rounded-full transition-all text-white backdrop-blur-md"
+        {/* Dynamic Interface Elements */}
+        {(!sidebarOpen || isHovering) && (
+           <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             className="absolute top-10 right-10 z-40 flex items-center gap-4"
            >
-             <List className="w-6 h-6" />
-           </button>
+             <button 
+                onClick={() => setSidebarOpen(true)}
+                className="p-5 bg-black/40 hover:bg-red-600 rounded-[20px] transition-all border border-white/10 backdrop-blur-xl group shadow-2xl"
+                title="Open Dashboard"
+             >
+               <List className="w-6 h-6 group-hover:scale-110 transition-transform" />
+             </button>
+           </motion.div>
         )}
 
-        {/* Info Overlay */}
-        <div className="absolute inset-x-0 bottom-0 p-8 bg-gradient-to-t from-black via-black/50 to-transparent pointer-events-none group">
-           <motion.div 
-             key={currentVideo?.id}
-             initial={{ opacity: 0, x: -20 }}
-             animate={{ opacity: 1, x: 0 }}
-             className="max-w-2xl"
-           >
-             <span className="inline-block px-3 py-1 bg-red-600 rounded text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-[0_0_20px_rgba(220,38,38,0.5)]">Now Playing</span>
-             <h2 className="text-3xl lg:text-5xl font-black italic uppercase tracking-tighter leading-none mb-2 drop-shadow-2xl">
-               {currentVideo?.title}
-             </h2>
-             <div className="flex items-center gap-2 text-zinc-400 font-bold italic uppercase text-xs tracking-widest">
-                <Tv className="w-4 h-4 text-red-600" />
-                <span>On {channelName}</span>
-             </div>
-           </motion.div>
+        {/* Global Branding Overlay */}
+        <div className="absolute top-10 left-10 z-40 pointer-events-none flex items-center gap-3 bg-black/40 px-6 py-3 rounded-full border border-white/5 backdrop-blur-md">
+           <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,1)]" />
+           <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50">StreamLink <span className="text-red-600">Pro</span></span>
+        </div>
+
+        {/* Immersive HUD Overlay */}
+        <div className="absolute inset-x-0 bottom-0 p-12 lg:p-16 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none transition-opacity duration-700">
+           <AnimatePresence mode="wait">
+             <motion.div 
+               key={currentVideo?.id}
+               initial={{ opacity: 0, y: 30 }}
+               animate={{ opacity: 1, y: 0 }}
+               exit={{ opacity: 0, scale: 0.95 }}
+               className="max-w-4xl"
+             >
+               <div className="flex items-center gap-4 mb-6">
+                 <span className="bg-red-600 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-red-600/40">Transmission Live</span>
+                 <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                    <Radio className="w-3 h-3 animate-pulse" /> Channel: {channelName}
+                 </div>
+               </div>
+               <h2 className="text-5xl lg:text-8xl font-black italic uppercase tracking-tighter leading-none mb-4 tracking-tighter drop-shadow-[0_10px_20px_rgba(0,0,0,1)]">
+                 {currentVideo?.title}
+               </h2>
+             </motion.div>
+           </AnimatePresence>
         </div>
       </div>
 
-      {/* Playlist Sidebar */}
+      {/* Control Sidebar */}
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div 
-            initial={{ x: 400 }}
+            initial={{ x: 500 }}
             animate={{ x: 0 }}
-            exit={{ x: 400 }}
-            className="w-full lg:w-[400px] h-[300px] lg:h-full bg-zinc-950 border-l border-white/10 flex flex-col z-30"
+            exit={{ x: 500 }}
+            transition={{ type: "spring", damping: 30, stiffness: 200 }}
+            className="w-full lg:w-[480px] h-[400px] lg:h-full bg-zinc-950 border-l border-white/5 flex flex-col z-50 shadow-[-50px_0_100px_rgba(0,0,0,0.5)] relative"
           >
-            <div className="p-6 border-b border-white/5 flex items-center justify-between">
-              <h3 className="text-sm font-black italic uppercase tracking-widest">Upcoming List</h3>
+            <div className="p-10 border-b border-white/5 flex items-center justify-between">
+              <div className="space-y-1">
+                <h3 className="text-sm font-black italic uppercase tracking-[0.3em] text-zinc-500">Live Feed</h3>
+                <h4 className="text-xl font-black uppercase italic tracking-tighter">Sequence Menu</h4>
+              </div>
               <button 
                 onClick={() => setSidebarOpen(false)}
-                className="lg:hidden p-2 hover:bg-zinc-800 rounded-lg text-zinc-400"
+                className="p-4 hover:bg-white/5 rounded-2xl text-zinc-600 hover:text-white transition-all"
               >
-                Close
+                <X className="w-6 h-6" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto scrollbar-hide">
+            <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
               {videos.map((v, i) => (
-                <button
+                <motion.button
                   key={v.id}
                   onClick={() => setCurrentIndex(i)}
-                  className={`w-full p-4 flex gap-4 text-left transition-all border-b border-white/5 ${
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={`group w-full p-4 flex gap-5 text-left transition-all rounded-3xl border ${
                     i === currentIndex 
-                    ? 'bg-red-600/10 border-l-4 border-l-red-600' 
-                    : 'hover:bg-zinc-900 border-l-4 border-l-transparent'
+                    ? 'bg-red-600/10 border-red-500/20 shadow-2xl' 
+                    : 'bg-black/40 border-white/5 hover:border-white/10'
                   }`}
                 >
-                  <div className="w-24 aspect-video bg-zinc-900 rounded-lg shrink-0 flex items-center justify-center overflow-hidden relative">
+                  <div className="w-28 aspect-video bg-zinc-900 rounded-[18px] shrink-0 flex items-center justify-center overflow-hidden relative border border-white/5">
                     {v.type === 'yt' ? (
                       <img 
                         src={`https://img.youtube.com/vi/${v.val}/mqdefault.jpg`} 
                         alt="thumb" 
-                        className="w-full h-full object-cover opacity-60"
+                        className={`w-full h-full object-cover transition-all duration-700 ${i === currentIndex ? 'scale-110 opacity-100' : 'opacity-40 grayscale group-hover:grayscale-0 group-hover:opacity-60'}`}
                         referrerPolicy="no-referrer"
                       />
                     ) : (
                       <Tv className="w-8 h-8 text-zinc-800" />
                     )}
                     {i === currentIndex && (
-                      <div className="absolute inset-0 bg-red-600/20 flex items-center justify-center">
-                        <Play className="w-6 h-6 fill-white text-white" />
-                      </div>
+                      <motion.div 
+                        layoutId="playing-dot"
+                        className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-red-600 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-2xl"
+                      >
+                         Live
+                      </motion.div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 py-1">
-                    <h4 className={`font-bold text-sm truncate uppercase tracking-tight ${i === currentIndex ? 'text-red-500' : 'text-zinc-200'}`}>
-                      {v.title}
-                    </h4>
-                    <p className="text-[10px] text-zinc-500 font-black uppercase mt-1">
-                      {v.type === 'yt' ? 'YouTube Feed' : 'Facebook Live'}
-                    </p>
+                  <div className="flex-1 min-w-0 py-2 flex flex-col justify-between">
+                    <div>
+                      <h4 className={`font-black uppercase tracking-tight leading-tight line-clamp-2 ${i === currentIndex ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
+                        {v.title}
+                      </h4>
+                    </div>
+                    <div className="flex items-center justify-between">
+                       <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">
+                         {v.type === 'yt' ? 'M-YOUTUBE' : 'M-FACEBOOK'}
+                       </span>
+                       {i === currentIndex && <ChevronRight className="w-4 h-4 text-red-600" />}
+                    </div>
                   </div>
-                </button>
+                </motion.button>
               ))}
             </div>
 
-            <div className="p-6 bg-black/50 border-t border-white/5 grid grid-cols-3 gap-3">
-              <button 
-                onClick={handlePrev}
-                className="p-4 bg-zinc-900 hover:bg-red-600 rounded-xl flex items-center justify-center transition-all group"
-              >
-                <SkipBack className="w-5 h-5 group-active:scale-90" />
-              </button>
-              <button className="p-4 bg-zinc-900 hover:bg-red-600 rounded-xl flex items-center justify-center transition-all group">
-                <Play className="w-5 h-5 fill-white" />
-              </button>
-              <button 
-                onClick={handleNext}
-                className="p-4 bg-zinc-900 hover:bg-red-600 rounded-xl flex items-center justify-center transition-all group"
-              >
-                <SkipForward className="w-5 h-5 group-active:scale-90" />
-              </button>
+            <div className="p-10 bg-black/80 backdrop-blur-xl border-t border-white/5 flex flex-col gap-8">
+               <div className="flex items-center justify-center gap-6">
+                  <button 
+                    onClick={handlePrev}
+                    className="p-6 bg-zinc-900 hover:bg-zinc-800 rounded-[28px] flex items-center justify-center transition-all group active:scale-90"
+                  >
+                    <SkipBack className="w-6 h-6 text-zinc-500 group-hover:text-white" />
+                  </button>
+                  <div className="p-8 bg-red-600 rounded-[32px] flex items-center justify-center shadow-2xl shadow-red-600/40 active:scale-95 transition-transform cursor-pointer">
+                    <Play className="w-10 h-10 fill-white text-white translate-x-1" />
+                  </div>
+                  <button 
+                    onClick={handleNext}
+                    className="p-6 bg-zinc-900 hover:bg-zinc-800 rounded-[28px] flex items-center justify-center transition-all group active:scale-90"
+                  >
+                    <SkipForward className="w-6 h-6 text-zinc-500 group-hover:text-white" />
+                  </button>
+               </div>
+
+               <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-4">
+                  <span>Vol 100%</span>
+                  <div className="flex gap-4">
+                     <button className="hover:text-white transition-colors"><Share2 className="w-4 h-4" /></button>
+                  </div>
+               </div>
             </div>
           </motion.div>
         )}
