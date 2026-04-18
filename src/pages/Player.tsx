@@ -114,21 +114,41 @@ export default function Player() {
         setChannelId(channelDoc.id);
         setChannelName(channelDoc.data().name);
         setLoopPlaylist(channelDoc.data().loopPlaylist || false);
-
-        const videosQuery = query(
-          collection(db, "channels", channelDoc.id, "videos"), 
-          where("active", "==", true),
-          orderBy("order", "asc")
-        );
-        
-        onSnapshot(videosQuery, (vSnapshot) => {
-          setVideos(vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Video)));
-        });
       }
     });
 
     return () => unsubChannel();
   }, [channelSlug]);
+
+  useEffect(() => {
+    if (!channelId) return;
+
+    const videosQuery = query(
+      collection(db, "channels", channelId, "videos"), 
+      where("active", "==", true),
+      orderBy("order", "asc")
+    );
+    
+    const unsubVideos = onSnapshot(videosQuery, (vSnapshot) => {
+      const vData = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Video));
+      // Only update if there's an actual change in IDs or order to prevent unnecessary re-renders
+      setVideos(prev => {
+        const hasChange = vData.length !== prev.length || vData.some((v, i) => v.id !== prev[i]?.id);
+        if (hasChange) return vData;
+        
+        // Even if IDs are same, check if specific video data changed (like startTime/endTime)
+        // because we want real-time edits to reflect, but not restart the list if only a LATER video was added
+        const dataChanged = vData.some((v, i) => 
+          v.val !== prev[i]?.val || 
+          v.startTime !== prev[i]?.startTime || 
+          v.endTime !== prev[i]?.endTime
+        );
+        return dataChanged ? vData : prev;
+      });
+    });
+
+    return () => unsubVideos();
+  }, [channelId]);
 
   // 2. Load YouTube API
   useEffect(() => {
@@ -246,8 +266,16 @@ export default function Player() {
 
   const currentVideo = videos[currentIndex];
 
+  const lastLoadedVideoRef = useRef<string | null>(null);
+  const lastLoadedParamsRef = useRef<string>("");
+  const lastHandledPlayCountRef = useRef(0);
+
   useEffect(() => {
-    if (!currentVideo) return;
+    if (!currentVideo) {
+      lastLoadedVideoRef.current = null;
+      lastLoadedParamsRef.current = "";
+      return;
+    }
 
     if (fbIntervalRef.current) clearInterval(fbIntervalRef.current);
 
@@ -263,6 +291,8 @@ export default function Player() {
       if (currentVideo.startTime) playerVars.start = currentVideo.startTime;
       if (currentVideo.endTime) playerVars.end = currentVideo.endTime;
 
+      const currentParams = `${currentVideo.val}-${currentVideo.startTime || 0}-${currentVideo.endTime || 'max'}`;
+
       if (!ytPlayerRef.current) {
         ytPlayerRef.current = new window.YT.Player('yt-player-target', {
           height: '1080',
@@ -275,12 +305,26 @@ export default function Player() {
             }
           }
         });
+        lastLoadedVideoRef.current = currentVideo.id;
+        lastLoadedParamsRef.current = currentParams;
+        lastHandledPlayCountRef.current = playCount;
       } else {
-        ytPlayerRef.current.loadVideoById({
-          videoId: currentVideo.val,
-          startSeconds: currentVideo.startTime || 0,
-          endSeconds: currentVideo.endTime || undefined
-        });
+        // Only reload if:
+        // 1. The playback params (ID/Start/End) actually changed
+        // 2. OR the user manually clicked Refresh (playCount changed)
+        const paramsChanged = lastLoadedParamsRef.current !== currentParams;
+        const playCountTriggered = lastHandledPlayCountRef.current !== playCount;
+
+        if (paramsChanged || playCountTriggered) {
+          ytPlayerRef.current.loadVideoById({
+            videoId: currentVideo.val,
+            startSeconds: currentVideo.startTime || 0,
+            endSeconds: currentVideo.endTime || undefined
+          });
+          lastLoadedVideoRef.current = currentVideo.id;
+          lastLoadedParamsRef.current = currentParams;
+          lastHandledPlayCountRef.current = playCount;
+        }
       }
     }
 
