@@ -29,8 +29,6 @@ export default function Player() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [channelName, setChannelName] = useState("Loading...");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isHovering, setIsHovering] = useState(false);
   
   const ytPlayerRef = useRef<any>(null);
   const fbPlayerRef = useRef<any>(null);
@@ -111,8 +109,8 @@ export default function Player() {
     if (currentVideo.type === 'yt' && window.YT && window.YT.Player) {
       if (!ytPlayerRef.current) {
         ytPlayerRef.current = new window.YT.Player('yt-player-target', {
-          height: '100%',
-          width: '100%',
+          height: '1080',
+          width: '1920',
           videoId: currentVideo.val,
           playerVars: { autoplay: 1, controls: 1, rel: 0, fs: 1, modestbranding: 1 },
           events: {
@@ -133,7 +131,7 @@ export default function Player() {
 
   if (videos.length === 0) {
     return (
-      <div className="h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden">
+      <div className="w-[2400px] h-[1300px] bg-black flex flex-col items-center justify-center relative overflow-hidden">
         <div className="relative flex flex-col items-center gap-6">
            <Tv className="w-20 h-20 text-zinc-900 animate-pulse" />
            <div className="text-center">
@@ -146,149 +144,115 @@ export default function Player() {
   }
 
   return (
-    <div className="h-screen bg-black overflow-hidden flex flex-col lg:flex-row font-sans text-white">
+    <div className="w-[2400px] h-[1300px] bg-black overflow-hidden flex font-sans text-white border-b-[220px] border-black">
       {/* 
-        CLEAN BROADCAST AREA (0px to 1920px when window is 2400x1080)
-        All HUD and branding overlays removed as per user request for clean capture.
+        CLEAN BROADCAST AREA (Fixed 1920x1080)
+        Top-Left aligned for easy OBS cropping.
       */}
-      <div 
-        className="flex-1 h-full relative bg-black flex items-center justify-center group"
-      >
+      <div className="w-[1920px] h-[1080px] relative bg-black shrink-0">
         {currentVideo?.type === 'yt' ? (
-          <div id="yt-player-target" className="absolute inset-0 w-full h-full" />
+          <div id="yt-player-target" className="w-full h-full" />
         ) : (
-          <div className="absolute inset-0 w-full h-full flex items-center justify-center">
+          <div className="w-full h-full flex items-center justify-center">
             <div 
               className="fb-video" 
               data-href={currentVideo?.val} 
               data-autoplay="true" 
               data-allowfullscreen="true"
-              data-width="auto"
+              data-width="1920"
               data-show-captions="false"
-              style={{ width: '100%', height: '100%' }}
+              style={{ width: '1920px', height: '1080px' }}
             />
           </div>
         )}
-
-        {/* Sidebar reveal (invisible on capture if limited to 1920px) */}
-        {!sidebarOpen && (
-           <motion.div 
-             initial={{ opacity: 0 }}
-             whileHover={{ opacity: 1 }}
-             className="absolute top-10 right-10 z-40"
-           >
-             <button 
-                onClick={() => setSidebarOpen(true)}
-                className="p-5 bg-white text-black hover:scale-110 rounded-[20px] transition-all shadow-2xl"
-             >
-               <List className="w-6 h-6" />
-             </button>
-           </motion.div>
-        )}
       </div>
 
-      {/* Control Sidebar */}
-      <AnimatePresence>
-        {sidebarOpen && (
-          <motion.div 
-            initial={{ x: 500 }}
-            animate={{ x: 0 }}
-            exit={{ x: 500 }}
-            transition={{ type: "spring", damping: 30, stiffness: 200 }}
-            className="w-full lg:w-[480px] h-[400px] lg:h-full bg-zinc-950 border-l border-white/5 flex flex-col z-50 shadow-[-50px_0_100px_rgba(0,0,0,0.5)] relative"
-          >
-            <div className="p-10 border-b border-white/5 flex items-center justify-between">
-              <div className="space-y-1">
-                <h3 className="text-sm font-black italic uppercase tracking-[0.3em] text-zinc-500">Live Feed</h3>
-                <h4 className="text-xl font-black uppercase italic tracking-tighter">Sequence Menu</h4>
+      {/* Control Sidebar (Permanent, 480px Wide, 1300px High) */}
+      <div className="w-[480px] h-[1300px] bg-zinc-950 border-l border-white/5 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
+        <div className="p-8 border-b border-white/5 bg-zinc-900/50">
+          <div className="space-y-1">
+            <h3 className="text-xs font-black italic uppercase tracking-[0.3em] text-zinc-500">Live Feed</h3>
+            <h4 className="text-xl font-black uppercase italic tracking-tighter">Sequence Menu</h4>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-black/20">
+          {videos.map((v, i) => (
+            <motion.button
+              key={v.id}
+              onClick={() => setCurrentIndex(i)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`group w-full p-4 flex gap-5 text-left transition-all rounded-3xl border ${
+                i === currentIndex 
+                ? 'bg-red-600/10 border-red-500/20 shadow-2xl' 
+                : 'bg-black/40 border-white/5 hover:border-white/10'
+              }`}
+            >
+              <div className="w-24 aspect-video bg-zinc-900 rounded-[15px] shrink-0 flex items-center justify-center overflow-hidden relative border border-white/5">
+                {v.type === 'yt' ? (
+                  <img 
+                    src={`https://img.youtube.com/vi/${v.val}/mqdefault.jpg`} 
+                    alt="thumb" 
+                    className={`w-full h-full object-cover transition-all duration-700 ${i === currentIndex ? 'scale-110 opacity-100' : 'opacity-40 grayscale group-hover:grayscale-0 group-hover:opacity-60'}`}
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <Tv className="w-8 h-8 text-zinc-800" />
+                )}
+                {i === currentIndex && (
+                  <div className="absolute inset-0 bg-red-600/20 flex items-center justify-center">
+                    <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0 py-1 flex flex-col justify-center">
+                <h4 className={`font-black uppercase tracking-tight leading-tight line-clamp-2 text-xs ${i === currentIndex ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
+                  {v.title}
+                </h4>
+                <div className="flex items-center justify-between mt-2">
+                   <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">
+                     {v.type === 'yt' ? 'M-YOUTUBE' : 'M-FACEBOOK'}
+                   </span>
+                   {i === currentIndex && <ChevronRight className="w-4 h-4 text-red-600" />}
+                </div>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+
+        {/* Global Controls */}
+        <div className="p-10 bg-black/80 backdrop-blur-3xl border-t border-white/5 flex flex-col gap-8">
+           <div className="flex items-center justify-center gap-6">
+              <button 
+                onClick={handlePrev}
+                className="p-5 bg-zinc-900 hover:bg-zinc-800 rounded-[24px] transition-all group active:scale-90"
+              >
+                <SkipBack className="w-5 h-5 text-zinc-500 group-hover:text-white" />
+              </button>
+              <div 
+                className="p-8 bg-red-600 rounded-[32px] flex items-center justify-center shadow-2xl shadow-red-600/40 active:scale-95 transition-transform cursor-pointer"
+                onClick={() => handleNext()} // Shortcut for testing
+              >
+                <Play className="w-8 h-8 fill-white text-white translate-x-1" />
               </div>
               <button 
-                onClick={() => setSidebarOpen(false)}
-                className="p-4 hover:bg-white/5 rounded-2xl text-zinc-600 hover:text-white transition-all"
+                onClick={handleNext}
+                className="p-5 bg-zinc-900 hover:bg-zinc-800 rounded-[24px] transition-all group active:scale-90"
               >
-                <X className="w-6 h-6" />
+                <SkipForward className="w-5 h-5 text-zinc-500 group-hover:text-white" />
               </button>
-            </div>
+           </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
-              {videos.map((v, i) => (
-                <motion.button
-                  key={v.id}
-                  onClick={() => setCurrentIndex(i)}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className={`group w-full p-4 flex gap-5 text-left transition-all rounded-3xl border ${
-                    i === currentIndex 
-                    ? 'bg-red-600/10 border-red-500/20 shadow-2xl' 
-                    : 'bg-black/40 border-white/5 hover:border-white/10'
-                  }`}
-                >
-                  <div className="w-28 aspect-video bg-zinc-900 rounded-[18px] shrink-0 flex items-center justify-center overflow-hidden relative border border-white/5">
-                    {v.type === 'yt' ? (
-                      <img 
-                        src={`https://img.youtube.com/vi/${v.val}/mqdefault.jpg`} 
-                        alt="thumb" 
-                        className={`w-full h-full object-cover transition-all duration-700 ${i === currentIndex ? 'scale-110 opacity-100' : 'opacity-40 grayscale group-hover:grayscale-0 group-hover:opacity-60'}`}
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <Tv className="w-8 h-8 text-zinc-800" />
-                    )}
-                    {i === currentIndex && (
-                      <motion.div 
-                        layoutId="playing-dot"
-                        className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-red-600 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-2xl"
-                      >
-                         Live
-                      </motion.div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0 py-2 flex flex-col justify-between">
-                    <div>
-                      <h4 className={`font-black uppercase tracking-tight leading-tight line-clamp-2 ${i === currentIndex ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
-                        {v.title}
-                      </h4>
-                    </div>
-                    <div className="flex items-center justify-between">
-                       <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">
-                         {v.type === 'yt' ? 'M-YOUTUBE' : 'M-FACEBOOK'}
-                       </span>
-                       {i === currentIndex && <ChevronRight className="w-4 h-4 text-red-600" />}
-                    </div>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-
-            <div className="p-10 bg-black/80 backdrop-blur-xl border-t border-white/5 flex flex-col gap-8">
-               <div className="flex items-center justify-center gap-6">
-                  <button 
-                    onClick={handlePrev}
-                    className="p-6 bg-zinc-900 hover:bg-zinc-800 rounded-[28px] flex items-center justify-center transition-all group active:scale-90"
-                  >
-                    <SkipBack className="w-6 h-6 text-zinc-500 group-hover:text-white" />
-                  </button>
-                  <div className="p-8 bg-red-600 rounded-[32px] flex items-center justify-center shadow-2xl shadow-red-600/40 active:scale-95 transition-transform cursor-pointer">
-                    <Play className="w-10 h-10 fill-white text-white translate-x-1" />
-                  </div>
-                  <button 
-                    onClick={handleNext}
-                    className="p-6 bg-zinc-900 hover:bg-zinc-800 rounded-[28px] flex items-center justify-center transition-all group active:scale-90"
-                  >
-                    <SkipForward className="w-6 h-6 text-zinc-500 group-hover:text-white" />
-                  </button>
-               </div>
-
-               <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-4">
-                  <span>Vol 100%</span>
-                  <div className="flex gap-4">
-                     <button className="hover:text-white transition-colors"><Share2 className="w-4 h-4" /></button>
-                  </div>
-               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+           <div className="flex flex-col gap-2 px-4">
+              <div className="flex items-center justify-between text-[10px] font-black text-zinc-600 uppercase tracking-widest">
+                 <span>Active Node: {channelName}</span>
+                 <Share2 className="w-4 h-4 hover:text-white cursor-pointer transition-colors" />
+              </div>
+              <p className="text-[9px] text-zinc-700 font-bold uppercase tracking-tighter">Broadcast Output: 1920x1080 Clean</p>
+           </div>
+        </div>
+      </div>
     </div>
   );
 }
