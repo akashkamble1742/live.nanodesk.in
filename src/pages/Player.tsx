@@ -19,7 +19,7 @@ interface Video {
   id: string;
   title: string;
   url: string;
-  type: 'yt' | 'fb';
+  type: 'yt' | 'fb' | 'x' | 'generic';
   val: string;
   order: number;
   active: boolean;
@@ -105,6 +105,7 @@ export default function Player() {
   const ytPlayerRef = useRef<any>(null);
   const fbPlayerRef = useRef<any>(null);
   const fbIntervalRef = useRef<any>(null);
+  const videoElementRef = useRef<HTMLVideoElement>(null);
 
   // 1. Fetch Channel and Playlist
   useEffect(() => {
@@ -326,6 +327,17 @@ export default function Player() {
 
     if (fbIntervalRef.current) clearInterval(fbIntervalRef.current);
 
+    // Stop other players
+    if (currentVideo.type !== 'yt' && ytPlayerRef.current && ytPlayerRef.current.pauseVideo) {
+      try { ytPlayerRef.current.pauseVideo(); } catch(e) {}
+    }
+    if (currentVideo.type !== 'fb' && fbPlayerRef.current) {
+      try { fbPlayerRef.current.pause(); } catch(e) {}
+    }
+    if (currentVideo.type !== 'generic' && videoElementRef.current) {
+      try { videoElementRef.current.pause(); } catch(e) {}
+    }
+
     if (currentVideo.type === 'yt' && window.YT && window.YT.Player) {
       const playerVars: any = { 
         autoplay: 1, 
@@ -356,21 +368,33 @@ export default function Player() {
         lastLoadedParamsRef.current = currentParams;
         lastHandledPlayCountRef.current = playCount;
       } else {
-        // Only reload if:
-        // 1. The playback params (ID/Start/End) actually changed
-        // 2. OR the user manually clicked Refresh (playCount changed)
         const paramsChanged = lastLoadedParamsRef.current !== currentParams;
         const playCountTriggered = lastHandledPlayCountRef.current !== playCount;
 
         if (paramsChanged || playCountTriggered) {
-          ytPlayerRef.current.loadVideoById({
-            videoId: currentVideo.val,
-            startSeconds: currentVideo.startTime || 0,
-            endSeconds: currentVideo.endTime || undefined
-          });
+          try {
+            ytPlayerRef.current.loadVideoById({
+              videoId: currentVideo.val,
+              startSeconds: currentVideo.startTime || 0,
+              endSeconds: currentVideo.endTime || undefined
+            });
+          } catch (e) {
+            // If the player is corrupted, recreate it
+            ytPlayerRef.current = new window.YT.Player('yt-player-target', {
+              videoId: currentVideo.val,
+              playerVars,
+              events: {
+                onStateChange: (event: any) => {
+                  if (event.data === window.YT.PlayerState.ENDED) handleNext();
+                }
+              }
+            });
+          }
           lastLoadedVideoRef.current = currentVideo.id;
           lastLoadedParamsRef.current = currentParams;
           lastHandledPlayCountRef.current = playCount;
+        } else {
+          try { ytPlayerRef.current.playVideo(); } catch(e) {}
         }
       }
     }
@@ -378,7 +402,6 @@ export default function Player() {
     if (currentVideo.type === 'fb' && window.FB) {
       setTimeout(() => window.FB.XFBML.parse(), 100);
 
-      // Facebook Trimming Handler
       if (currentVideo.endTime) {
         fbIntervalRef.current = setInterval(() => {
           if (fbPlayerRef.current) {
@@ -391,10 +414,15 @@ export default function Player() {
       }
     }
 
+    if (currentVideo.type === 'generic' && videoElementRef.current) {
+      videoElementRef.current.load();
+      videoElementRef.current.play().catch(() => {});
+    }
+
     return () => {
       if (fbIntervalRef.current) clearInterval(fbIntervalRef.current);
     };
-  }, [currentIndex, currentVideo?.id, currentVideo?.val, currentVideo?.startTime, currentVideo?.endTime, playCount]);
+  }, [currentIndex, currentVideo?.id, currentVideo?.type, currentVideo?.val, currentVideo?.startTime, currentVideo?.endTime, playCount]);
 
   useEffect(() => {
     if (targetVideoId && videos.length > 0) {
@@ -428,52 +456,53 @@ export default function Player() {
         Top-Left aligned for easy OBS cropping.
       */}
       <div className="w-[1920px] h-[1080px] relative bg-black shrink-0">
-        {currentVideo?.type === 'yt' ? (
+        {/* YouTube Container */}
+        <div className={`w-full h-full ${currentVideo?.type !== 'yt' ? 'hidden' : ''}`}>
           <div id="yt-player-target" className="w-full h-full" />
-        ) : currentVideo?.type === 'fb' ? (
-          <div className="w-full h-full flex items-center justify-center" key={`${currentVideo.id}-${playCount}`}>
-            <div 
-              className="fb-video" 
-              data-href={currentVideo?.val} 
-              data-autoplay="true" 
-              data-allowfullscreen="true"
-              data-width="1920"
-              data-show-captions="false"
-              style={{ width: '1920px', height: '1080px' }}
-            />
-          </div>
-        ) : currentVideo?.type === 'x' ? (
-          <div className="w-full h-full bg-black flex items-center justify-center" key={`${currentVideo.id}-${playCount}`}>
-            <iframe
-              src={`https://twitframe.com/show?url=${encodeURIComponent(currentVideo.val)}`}
-              className="w-full h-full border-none shadow-2xl"
-              allow="autoplay; encrypted-media; fullscreen"
-              onLoad={(e: any) => {
-                // Twitter embeds are notoriously hard to loop/control without APIs
-                // But we can reload them when needed via playCount key
-              }}
-            />
-          </div>
-        ) : (
-          <div className="w-full h-full bg-black flex items-center justify-center" key={`${currentVideo.id}-${playCount}`}>
-            <video
-              src={currentVideo?.val}
-              autoPlay
-              muted={false}
-              controls
-              className="w-full h-full object-contain"
-              onEnded={handleNext}
-              onLoadedMetadata={(e: any) => {
-                if (currentVideo.startTime) e.target.currentTime = currentVideo.startTime;
-              }}
-              onTimeUpdate={(e: any) => {
-                if (currentVideo.endTime && e.target.currentTime >= currentVideo.endTime) {
-                  handleNext();
-                }
-              }}
-            />
-          </div>
-        )}
+        </div>
+
+        {/* Facebook Container */}
+        <div className={`w-full h-full flex items-center justify-center ${currentVideo?.type !== 'fb' ? 'hidden' : ''}`} key={`${currentVideo.id}-${playCount}`}>
+          <div 
+            className="fb-video" 
+            data-href={currentVideo?.val} 
+            data-autoplay="true" 
+            data-allowfullscreen="true"
+            data-width="1920"
+            data-show-captions="false"
+            style={{ width: '1920px', height: '1080px' }}
+          />
+        </div>
+
+        {/* X (Twitter) Container */}
+        <div className={`w-full h-full bg-black flex items-center justify-center ${currentVideo?.type !== 'x' ? 'hidden' : ''}`} key={`${currentVideo.id}-x-${playCount}`}>
+          <iframe
+            src={currentVideo?.type === 'x' ? `https://twitframe.com/show?url=${encodeURIComponent(currentVideo.val)}` : ''}
+            className="w-full h-full border-none shadow-2xl"
+            allow="autoplay; encrypted-media; fullscreen"
+          />
+        </div>
+
+        {/* Generic/Standard Video Container */}
+        <div className={`w-full h-full bg-black flex items-center justify-center ${currentVideo?.type !== 'generic' ? 'hidden' : ''}`}>
+          <video
+            ref={videoElementRef}
+            src={currentVideo?.type === 'generic' ? currentVideo.val : ''}
+            autoPlay
+            muted={false}
+            controls
+            className="w-full h-full object-contain"
+            onEnded={handleNext}
+            onLoadedMetadata={(e: any) => {
+              if (currentVideo?.startTime) e.target.currentTime = currentVideo.startTime;
+            }}
+            onTimeUpdate={(e: any) => {
+              if (currentVideo?.endTime && e.target.currentTime >= currentVideo.endTime) {
+                handleNext();
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Control Sidebar (Permanent, 480px Wide, 1300px High) */}
