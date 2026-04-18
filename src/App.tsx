@@ -29,7 +29,7 @@ export default function App() {
         <Navbar />
         <main>
           <Routes>
-            <Route path="/login" element={!user ? <Login /> : <Navigate to="/admin" />} />
+            <Route path="/login" element={<Login />} />
             
             {/* Player route is public */}
             <Route path="/play/:channelSlug" element={<Player />} />
