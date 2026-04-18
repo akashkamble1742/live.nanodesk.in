@@ -15,6 +15,7 @@ interface Video {
   active: boolean;
   startTime?: number;
   endTime?: number;
+  loopVideo?: boolean;
 }
 
 interface Channel {
@@ -88,6 +89,7 @@ export default function ChannelDetail() {
         active: true,
         startTime: Number(newStartTime) || 0,
         endTime: Number(newEndTime) || 0,
+        loopVideo: false,
         updatedAt: serverTimestamp()
       });
       setNewVideoUrl("");
@@ -155,6 +157,13 @@ export default function ChannelDetail() {
     if (!channelId) return;
     await updateDoc(doc(db, "channels", channelId, "videos", v.id), {
       active: !v.active
+    });
+  };
+
+  const toggleVideoLoop = async (v: Video) => {
+    if (!channelId) return;
+    await updateDoc(doc(db, "channels", channelId, "videos", v.id), {
+      loopVideo: !v.loopVideo
     });
   };
 
@@ -259,6 +268,11 @@ export default function ChannelDetail() {
                               {video.startTime || 0}s ➔ {video.endTime || 'END'}s
                             </span>
                           ) : null}
+                          {video.loopVideo && (
+                            <span className="text-[10px] text-orange-500 font-black uppercase tracking-widest bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20 flex items-center gap-1">
+                              <Disc className="w-2.5 h-2.5 animate-spin" /> Single Loop
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -270,6 +284,13 @@ export default function ChannelDetail() {
                         title="Edit Source"
                       >
                         <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => toggleVideoLoop(video)}
+                        className={`p-2.5 rounded-xl border transition-all ${video.loopVideo ? 'bg-orange-500 underline text-black border-orange-500/40 shadow-[0_0_15px_rgba(249,115,22,0.2)]' : 'bg-transparent text-zinc-600 border-white/5 hover:border-white/10'}`}
+                        title={video.loopVideo ? "Disable Single Loop" : "Enable Single Loop"}
+                      >
+                        <Disc className={`w-4 h-4 ${video.loopVideo ? 'animate-spin' : ''}`} />
                       </button>
                       <button 
                         onClick={() => toggleActive(video)}

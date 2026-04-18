@@ -24,6 +24,7 @@ interface Video {
   active: boolean;
   startTime?: number;
   endTime?: number;
+  loopVideo?: boolean;
 }
 
 export default function Player() {
@@ -105,6 +106,11 @@ export default function Player() {
   }, []);
 
   const handleNext = () => {
+    if (currentVideo?.loopVideo) {
+      setPlayCount(c => c + 1);
+      return;
+    }
+    
     setCurrentIndex((p) => {
       if (p === videos.length - 1) {
         if (loopPlaylist) {
